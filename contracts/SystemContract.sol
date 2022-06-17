@@ -1,0 +1,258 @@
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "./library/Initializable.sol";
+import "./Params.sol";
+import "./Validator.sol";
+import "./interfaces/IValidator.sol";
+import "./library/SortedList.sol";
+
+contract SystemContract is Initializable, Params, SafeSend {
+    using SafeMath for uint256;
+    using Address for address;
+    using SortedLinkedList for SortedLinkedList.List;
+
+    uint256 public constant RateDenominator = 100;   // rate denominator
+    uint256 public gBlockEpoch;                      // The cycle in which the corresponding update is performed
+    uint256 public gMinSelfStake;                    // Become the verifier's own minimum stake
+    address payable public gCommunityAddress;        //
+    uint8 public gMaxValidators;                     // Maximum number of activation verifiers supported
+    uint8 public gShareOutBonusPercent;              //
+
+    uint256 public gTotalStake;                      // Total stake amount of the whole network
+    uint256 public gTotalPendingShare;               // Total amount to be share
+    address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
+    mapping(address => IValidator) public gValsMap;  // mapping from validator address to validator contract.
+    SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
+    address[] activeValidators;                      // validators that can take part in the consensus
+
+    enum Operation {ShareOutBonus, UpdateValidators, LazyPunish, DecreaseMissingBlockCounter}
+    mapping(uint256 => mapping(Operation => bool)) operationsDone;
+
+    modifier onlyLocal() {
+        require(msg.sender == address(0x0000000000000000000000000000000000000000), "E00");
+        _;
+    }
+
+    modifier onlyGenesisBlock() {
+        require(block.number == 0, "E01");
+        _;
+    }
+
+    modifier onlyNotExistValidator(address val) {
+        require(gValsMap[val] == IValidator(address(0)), "E02");
+        _;
+    }
+
+    modifier onlyExistValidator(address val) {
+        require(gValsMap[val] != IValidator(address(0)), "E03");
+        _;
+    }
+
+    modifier onlyNotContract(address val) {
+        require(!val.isContract(), "E02");
+        _;
+    }
+
+    modifier onlyMiner() {
+        require(msg.sender == block.coinbase, "E04");
+        _;
+    }
+
+    modifier onlyValidAddress(address addr) {
+        require(addr != address(0), "E05");
+        _;
+    }
+    
+    modifier onlyValid100(uint256 rate) {
+        require(rate <= RateDenominator, "E06");
+        _;
+    }
+
+    modifier onlyGreaterZero(uint256 amount) {
+        require(amount > 0, "E07");
+        _;
+    }
+
+    modifier onlyOperateOnce(Operation operation) {
+        require(!operationsDone[block.number][operation], "E06");
+        operationsDone[block.number][operation] = true;
+        _;
+    }
+
+    modifier onlyBlockEpoch() {
+        require(block.number % gBlockEpoch == 0, "E17");
+        _;
+    }
+
+    function initialize(uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
+        address payable communityAddress, uint8 shareOutBonusPercent)
+        external
+        onlyValid100(maxValidators)
+        onlyGreaterZero(maxValidators)
+        onlyGreaterZero(epoch)
+        onlyValidAddress(communityAddress)
+        onlyValid100(shareOutBonusPercent)
+        initializer {
+
+        gMaxValidators = maxValidators;
+        gBlockEpoch = epoch;
+        gMinSelfStake = minSelfStake;
+        gCommunityAddress = communityAddress;
+        gShareOutBonusPercent = shareOutBonusPercent;
+    }
+
+    function initValidator(address val, address claimer, uint256 rate, uint256 stake)
+        external
+        onlyNotExistValidator(val)
+        onlyValidAddress(val)
+        onlyValidAddress(claimer)
+        onlyValid100(rate)
+        onlyGreaterZero(stake)
+        // #if Mainnet
+        onlyGenesisBlock
+        // #endif
+        onlyInitialized {
+
+        IValidator iVal = new Validator(val, claimer, rate, stake, State.Ready);
+        gValsMap[val] = iVal;
+        topValidators.improveRanking(iVal);
+
+        gTotalStake = gTotalStake.add(stake);
+    }
+
+    function registerValidator(address val, address claimer, uint256 rate)
+        external
+        payable
+        onlyNotExistValidator(val)
+        onlyValidAddress(val)
+        onlyValidAddress(claimer)
+        onlyNotContract(val)
+        onlyNotContract(claimer)
+        onlyValid100(rate)
+        onlyInitialized {
+
+        require(msg.value >= gMinSelfStake, "E20");
+        IValidator iVal = new Validator(val, claimer, rate, msg.value, State.Ready);
+        gValsMap[val] = iVal;
+        topValidators.improveRanking(iVal);
+
+        gTotalStake = gTotalStake.add(msg.value);
+    }
+
+    function buyStocks(address val)
+        external
+        payable
+        onlyGreaterZero(msg.value)
+        onlyExistValidator(val)
+        onlyNotContract(msg.sender) {
+
+        IValidator iVal = gValsMap[val];
+        uint256 stocks = iVal.buyStocks{value : msg.value}(msg.sender);
+
+        if(iVal.selfStake() >= gMinSelfStake) {
+            topValidators.improveRanking(iVal);
+        }
+
+        gTotalStake = gTotalStake.add(msg.value);
+    }
+
+    function sellStocks(address val, uint256 stocks)
+        external
+        onlyGreaterZero(stocks)
+        onlyExistValidator(val)
+        onlyNotContract(msg.sender) {
+
+        IValidator iVal = gValsMap[val];
+        uint256 stakes = iVal.sellStocks(msg.sender, stocks);
+        if(iVal.selfStake() < gMinSelfStake) {
+            topValidators.removeRanking(iVal);
+        } else {
+            topValidators.lowerRanking(iVal);
+        }
+        gTotalStake = gTotalStake.sub(stakes);
+    }
+
+    function refund(address val)
+        external
+        onlyExistValidator(val) {
+
+        address payable sender = payable(msg.sender);
+        IValidator iVal = gValsMap[val];
+        iVal.refund(sender);
+    }
+
+    function shareOutBonus()
+        external
+        payable
+        // #if !Mainnet
+        onlyLocal
+        // #endif
+        onlyOperateOnce(Operation.ShareOutBonus) {
+
+        if (msg.value > 0) {
+            gTotalPendingShare += msg.value;
+        }
+        if (block.number % gBlockEpoch == 0 && gTotalPendingShare > 0) {
+            uint256 amount = gTotalPendingShare;
+            gTotalPendingShare = 0;
+            uint cnt = gActiveValidators.length;
+            uint bonusSingle = amount.mul(gShareOutBonusPercent).div(RateDenominator).div(cnt);
+            uint cpFee = amount - (bonusSingle * cnt);
+            for (uint i = 0; i < cnt; i++) {
+                address val = gActiveValidators[i];
+                IValidator iVal = gValsMap[val];
+                uint256 rate = iVal.getRate();
+                uint256 bonusInvestor = bonusSingle.mul(rate).div(RateDenominator);
+                uint256 bonusValidator = bonusSingle - bonusInvestor;
+                if(bonusInvestor > 0) {
+                    iVal.addBonus{value : bonusInvestor}();
+                }
+                if(bonusValidator > 0) {
+                    iVal.buyStocks{value : bonusValidator}(val);
+                }
+            }
+            if(cpFee > 0) {
+                sendValue(gCommunityAddress, cpFee);
+            }
+        }
+    }
+
+    function getTopValidators(uint8 _count) external view returns (address[] memory) {
+        // Use default MaxValidators if _count is not provided.
+        if (_count == 0) {
+            _count = gMaxValidators;
+        }
+        // set max limit: min(_count, list.length)
+        if (_count > topValidators.length) {
+            _count = topValidators.length;
+        }
+
+        address[] memory _topValidators = new address[](_count);
+        IValidator cur = topValidators.head;
+        for (uint8 i = 0; i < _count; i++) {
+            _topValidators[i] = cur.validator();
+            cur = topValidators.next[cur];
+        }
+        return _topValidators;
+    }
+
+    function updateActiveValidatorSet(address[] memory newSet)
+    external
+        // #if Mainnet
+    onlyLocal
+        // #endif
+    onlyOperateOnce(Operation.UpdateValidators)
+    onlyBlockEpoch
+    {
+        // empty validators set
+        require(newSet.length > 0, "E18");
+        activeValidators = newSet;
+    }
+
+    function getActiveValidators() external view returns (address[] memory){
+        return activeValidators;
+    }
+}

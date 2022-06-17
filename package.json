@@ -1,0 +1,29 @@
+{
+  "name": "conscontracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "NET=devnet yarn run hardhat test ",
+    "testdev": "NET=devnet yarn run hardhat compile && yarn run hardhat test test/SystemContract.js",
+    "clean": "yarn run hardhat clean",
+    "compile": "NET=mainnet yarn run hardhat compile",
+    "size": "yarn run hardhat size-contracts"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.5",
+    "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "chai": "^4.3.6",
+    "ethereum-waffle": "^3.4.4",
+    "ethers": "^5.6.5",
+    "hardhat": "^2.9.3"
+  },
+  "dependencies": {
+    "@nomiclabs/hardhat-solpp": "^2.0.1",
+    "@nomiclabs/hardhat-truffle5": "^2.0.5",
+    "@openzeppelin/contracts": "^4.6.0",
+    "hardhat-contract-sizer": "^2.5.1"
+  }
+}
