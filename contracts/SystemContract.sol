@@ -93,7 +93,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         _;
     }
 
-    function initialize(uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
+    function initialize(address admin, uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
         address payable communityAddress, uint8 shareOutBonusPercent)
         external
         onlyValid100(maxValidators)
