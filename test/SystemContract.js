@@ -45,7 +45,7 @@ describe("SystemContract test", function () {
     let valContractAddr = await SystemContract.gValsMap(Signers[1].address);
     let val = ValFactory.attach(valContractAddr);
     expect(await val.getRate()).equal(50);
-    expect(await val.gClaimer()).equal(Signers[25+1].address);
+    expect(await val.gManager()).equal(Signers[25+1].address);
     expect(await val.gValidator()).equal(Signers[1].address);
     expect(await val.gTotalStake()).equal(stake);
     expect(await val.gTotalStock()).equal(stake.mul(50));
@@ -64,7 +64,7 @@ describe("SystemContract test", function () {
       let valContractAddr = await SystemContract.gValsMap(Signers[i+1].address);
       let val = ValFactory.attach(valContractAddr);
       expect(await val.getRate()).equal(50);
-      expect(await val.gClaimer()).equal(Signers[i+25+1].address);
+      expect(await val.gManager()).equal(Signers[i+25+1].address);
       expect(await val.gValidator()).equal(Signers[i+1].address);
       expect(await val.gTotalStake()).equal(MinSelfStake);
       expect(await val.gTotalStock()).equal(MinSelfStake.mul(50));

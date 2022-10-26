@@ -19,10 +19,10 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
 
     // self data
     address public gValidator;   // Address of current node
-    address public gClaimer;     // Claimer address of current node
+    address public gManager;     // Manager address of current node
     uint256 public gRate;        // Commission sharing proportion of current node
     State public gState;         // State of current node
-
+    bool public gAcceptDelegation;
     // defi pool
     address[] public gAllHolderAddrs;             // all holder address
     mapping(address => bool) public gHolderExist; // holder address exist
@@ -37,10 +37,11 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address val, address claimer, uint256 rate, uint256 stake, State state) {
+    constructor(address val, address manager, uint256 rate, uint256 stake, bool acceptDelegation, State state) {
         gValidator = val;
-        gClaimer = claimer;
+        gManager = manager;
         gRate = rate;
+        gAcceptDelegation = acceptDelegation;
         gState = state;
         uint256 stocks = stakeToStock(stake);
         gStockMap[val] = stocks;
@@ -49,7 +50,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
 
     function buyStocks(address sender) external override payable onlyOwner returns (uint256) {
-        address val = getClaimer(sender);
+        address val = getManager(sender);
         if (gHolderExist[val] == false) {
             gAllHolderAddrs.push(val);
         }
@@ -61,7 +62,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
 
     function sellStocks(address sender, uint256 stocks) external override onlyOwner returns (uint256) {
-        address val = getClaimer(sender);
+        address val = getManager(sender);
         require(gStockMap[val] >= stocks, "E25");
         uint256 stakes = stockToStake(stocks);
         gStockMap[val] -= stocks;
@@ -73,7 +74,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
 
     function refund(address payable sender) external override onlyOwner{
-        address val = getClaimer(sender);
+        address val = getManager(sender);
         require(block.timestamp >= gRefundMap[val].lastRequestTime + RefundPendingTime, "E25");
         require(gRefundMap[val].refundPendingWei > 0, "E26");
 
@@ -98,9 +99,9 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         return stocks.mul(gTotalStake).div(gTotalStock);
     }
 
-    function getClaimer(address sender) private view returns (address) {
+    function getManager(address sender) private view returns (address) {
         address val;
-        if(gClaimer == sender) {
+        if(gManager == sender) {
             val = gValidator;
         } else {
             val = sender;

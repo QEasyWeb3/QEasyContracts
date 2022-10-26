@@ -110,11 +110,11 @@ contract SystemContract is Initializable, Params, SafeSend {
         gShareOutBonusPercent = shareOutBonusPercent;
     }
 
-    function initValidator(address val, address claimer, uint256 rate, uint256 stake)
+    function initValidator(address val, address manager, uint256 rate, uint256 stake, bool acceptDelegation)
         external
         onlyNotExistValidator(val)
         onlyValidAddress(val)
-        onlyValidAddress(claimer)
+        onlyValidAddress(manager)
         onlyValid100(rate)
         onlyGreaterZero(stake)
         // #if Mainnet
@@ -122,26 +122,26 @@ contract SystemContract is Initializable, Params, SafeSend {
         // #endif
         onlyInitialized {
 
-        IValidator iVal = new Validator(val, claimer, rate, stake, State.Ready);
+        IValidator iVal = new Validator(val, manager, rate, stake, acceptDelegation, State.Ready);
         gValidatorsMap[val] = iVal;
         topValidators.improveRanking(iVal);
 
         gTotalStake = gTotalStake.add(stake);
     }
 
-    function registerValidator(address val, address claimer, uint256 rate)
+    function registerValidator(address val, address manager, uint256 rate, bool acceptDelegation)
         external
         payable
         onlyNotExistValidator(val)
         onlyValidAddress(val)
-        onlyValidAddress(claimer)
+        onlyValidAddress(manager)
         onlyNotContract(val)
-        onlyNotContract(claimer)
+        onlyNotContract(manager)
         onlyValid100(rate)
         onlyInitialized {
 
         require(msg.value >= gMinSelfStake, "E20");
-        IValidator iVal = new Validator(val, claimer, rate, msg.value, State.Ready);
+        IValidator iVal = new Validator(val, manager, rate, msg.value, acceptDelegation, State.Ready);
         gValidatorsMap[val] = iVal;
         topValidators.improveRanking(iVal);
 
