@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -24,12 +24,13 @@ contract SystemContract is Initializable, Params, SafeSend {
     uint256 public gTotalStake;                      // Total stake amount of the whole network
     uint256 public gTotalPendingShare;               // Total amount to be share
     address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
-    mapping(address => IValidator) public gValsMap;  // mapping from validator address to validator contract.
+    mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
     address[] activeValidators;                      // validators that can take part in the consensus
 
     enum Operation {ShareOutBonus, UpdateValidators, LazyPunish, DecreaseMissingBlockCounter}
     mapping(uint256 => mapping(Operation => bool)) operationsDone;
+    mapping(bytes32 => bool) public doubleSignPunished;
 
     modifier onlyLocal() {
         require(msg.sender == address(0x0000000000000000000000000000000000000000), "E00");
@@ -42,12 +43,12 @@ contract SystemContract is Initializable, Params, SafeSend {
     }
 
     modifier onlyNotExistValidator(address val) {
-        require(gValsMap[val] == IValidator(address(0)), "E02");
+        require(gValidatorsMap[val] == IValidator(address(0)), "E02");
         _;
     }
 
     modifier onlyExistValidator(address val) {
-        require(gValsMap[val] != IValidator(address(0)), "E03");
+        require(gValidatorsMap[val] != IValidator(address(0)), "E03");
         _;
     }
 
@@ -87,6 +88,11 @@ contract SystemContract is Initializable, Params, SafeSend {
         _;
     }
 
+    modifier onlyNotDoubleSignPunished(bytes32 punishHash) {
+        require(!doubleSignPunished[punishHash], "E06");
+        _;
+    }
+
     function initialize(uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
         address payable communityAddress, uint8 shareOutBonusPercent)
         external
@@ -117,7 +123,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyInitialized {
 
         IValidator iVal = new Validator(val, claimer, rate, stake, State.Ready);
-        gValsMap[val] = iVal;
+        gValidatorsMap[val] = iVal;
         topValidators.improveRanking(iVal);
 
         gTotalStake = gTotalStake.add(stake);
@@ -136,7 +142,7 @@ contract SystemContract is Initializable, Params, SafeSend {
 
         require(msg.value >= gMinSelfStake, "E20");
         IValidator iVal = new Validator(val, claimer, rate, msg.value, State.Ready);
-        gValsMap[val] = iVal;
+        gValidatorsMap[val] = iVal;
         topValidators.improveRanking(iVal);
 
         gTotalStake = gTotalStake.add(msg.value);
@@ -149,8 +155,8 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(val)
         onlyNotContract(msg.sender) {
 
-        IValidator iVal = gValsMap[val];
-        uint256 stocks = iVal.buyStocks{value : msg.value}(msg.sender);
+        IValidator iVal = gValidatorsMap[val];
+        iVal.buyStocks{value : msg.value}(msg.sender);
 
         if(iVal.selfStake() >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
@@ -165,7 +171,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(val)
         onlyNotContract(msg.sender) {
 
-        IValidator iVal = gValsMap[val];
+        IValidator iVal = gValidatorsMap[val];
         uint256 stakes = iVal.sellStocks(msg.sender, stocks);
         if(iVal.selfStake() < gMinSelfStake) {
             topValidators.removeRanking(iVal);
@@ -180,7 +186,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(val) {
 
         address payable sender = payable(msg.sender);
-        IValidator iVal = gValsMap[val];
+        IValidator iVal = gValidatorsMap[val];
         iVal.refund(sender);
     }
 
@@ -203,7 +209,7 @@ contract SystemContract is Initializable, Params, SafeSend {
             uint cpFee = amount - (bonusSingle * cnt);
             for (uint i = 0; i < cnt; i++) {
                 address val = gActiveValidators[i];
-                IValidator iVal = gValsMap[val];
+                IValidator iVal = gValidatorsMap[val];
                 uint256 rate = iVal.getRate();
                 uint256 bonusInvestor = bonusSingle.mul(rate).div(RateDenominator);
                 uint256 bonusValidator = bonusSingle - bonusInvestor;
@@ -254,5 +260,41 @@ contract SystemContract is Initializable, Params, SafeSend {
 
     function getActiveValidators() external view returns (address[] memory){
         return activeValidators;
+    }
+
+    function lazyPunish(address _val)
+        external
+            // #if Mainnet
+        onlyLocal
+            // #endif
+        onlyExistValidator(_val)
+        onlyOperateOnce(Operation.LazyPunish){
+        // TODO
+    }
+
+    function decreaseMissedBlocksCounter()
+        external
+            // #if Mainnet
+        onlyLocal
+            // #endif
+        onlyBlockEpoch
+        onlyOperateOnce(Operation.DecreaseMissingBlockCounter){
+        // TODO
+    }
+
+    function doubleSignPunish(bytes32 _punishHash, address _val)
+    external
+        // #if Mainnet
+    onlyLocal
+        // #endif
+    onlyExistValidator(_val)
+    onlyNotDoubleSignPunished(_punishHash)
+    {
+        doubleSignPunished[_punishHash] = true;
+        // TODO
+    }
+
+    function isDoubleSignPunished(bytes32 punishHash) public view returns (bool) {
+        return doubleSignPunished[punishHash];
     }
 }

@@ -5,7 +5,7 @@ pragma solidity 0.8.4;
 
 import "./library/WithAdmin.sol";
 import "./library/SafeSend.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "./library/Initializable.sol";
 
 /*
     CommunityPool collects and manages parts of the block fees which is aim to reward superior developers.
