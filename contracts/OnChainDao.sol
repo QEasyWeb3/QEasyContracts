@@ -32,8 +32,8 @@ contract OnChainDao is Initializable {
         _;
     }
 
-    modifier onlyMiner() {
-        require(msg.sender == block.coinbase, "E40");
+    modifier onlyLocal() {
+        require(msg.sender == address(0x0000000000000000000000000000000000000000), "E00");
         _;
     }
 
@@ -100,7 +100,7 @@ contract OnChainDao is Initializable {
         return (p.id, p.action, p.from, p.to, p.value, p.data);
     }
 
-    function finishProposalById(uint id) external onlyMiner {
+    function finishProposalById(uint id) external onlyLocal {
         for (uint i = 0; i < passedProposals.length; i++) {
             if (passedProposals[i].id == id) {
                 if (i != passedProposals.length - 1) {

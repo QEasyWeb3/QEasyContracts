@@ -190,7 +190,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         iVal.refund(sender);
     }
 
-    function shareOutBonus()
+    function distributeBlockFee()
         external
         payable
         // #if !Mainnet
