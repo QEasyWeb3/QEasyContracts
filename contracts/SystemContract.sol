@@ -18,6 +18,7 @@ contract SystemContract is Initializable, Params, SafeSend {
     uint256 public gBlockEpoch;                      // The cycle in which the corresponding update is performed
     uint256 public gMinSelfStake;                    // Become the verifier's own minimum stake
     address payable public gCommunityAddress;        //
+    address public gAdminAddress;
     uint8 public gMaxValidators;                     // Maximum number of activation verifiers supported
     uint8 public gShareOutBonusPercent;              //
 
@@ -93,7 +94,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         _;
     }
 
-    function initialize(address admin, uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
+    function initialize(address adminAddress, uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
         address payable communityAddress, uint8 shareOutBonusPercent)
         external
         onlyValid100(maxValidators)
@@ -103,6 +104,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyValid100(shareOutBonusPercent)
         initializer {
 
+        gAdminAddress = adminAddress;
         gMaxValidators = maxValidators;
         gBlockEpoch = epoch;
         gMinSelfStake = minSelfStake;
