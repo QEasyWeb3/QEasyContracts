@@ -121,8 +121,8 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         return gTotalStake;
     }
 
-    function selfStake() external override view returns (uint256) {
-        uint256 stocks = gStockMap[gValidator];
+    function selfStake(address val) external override view returns (uint256) {
+        uint256 stocks = gStockMap[val];
         return stockToStake(stocks);
     }
 

@@ -27,7 +27,6 @@ contract SystemContract is Initializable, Params, SafeSend {
     address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
     mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
-    address[] activeValidators;                      // validators that can take part in the consensus
 
     enum Operation {ShareOutBonus, UpdateValidators, LazyPunish, DecreaseMissingBlockCounter}
     mapping(uint256 => mapping(Operation => bool)) operationsDone;
@@ -160,7 +159,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         IValidator iVal = gValidatorsMap[val];
         iVal.buyStocks{value : msg.value}(msg.sender);
 
-        if(iVal.selfStake() >= gMinSelfStake) {
+        if(iVal.selfStake(val) >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
         }
 
@@ -175,7 +174,7 @@ contract SystemContract is Initializable, Params, SafeSend {
 
         IValidator iVal = gValidatorsMap[val];
         uint256 stakes = iVal.sellStocks(msg.sender, stocks);
-        if(iVal.selfStake() < gMinSelfStake) {
+        if(iVal.selfStake(val) < gMinSelfStake) {
             topValidators.removeRanking(iVal);
         } else {
             topValidators.lowerRanking(iVal);
@@ -203,10 +202,13 @@ contract SystemContract is Initializable, Params, SafeSend {
         if (msg.value > 0) {
             gTotalPendingShare += msg.value;
         }
-        if (block.number % gBlockEpoch == 0 && gTotalPendingShare > 0) {
+    }
+
+    function shareOutBonusAtBlockEpoch() private {
+        uint cnt = gActiveValidators.length;
+        if (gTotalPendingShare > 0 && cnt > 0) {
             uint256 amount = gTotalPendingShare;
             gTotalPendingShare = 0;
-            uint cnt = gActiveValidators.length;
             uint bonusSingle = amount.mul(gShareOutBonusPercent).div(RateDenominator).div(cnt);
             uint cpFee = amount - (bonusSingle * cnt);
             for (uint i = 0; i < cnt; i++) {
@@ -257,11 +259,13 @@ contract SystemContract is Initializable, Params, SafeSend {
     {
         // empty validators set
         require(newSet.length > 0, "E18");
-        activeValidators = newSet;
+        gActiveValidators = newSet;
+
+        shareOutBonusAtBlockEpoch();
     }
 
     function getActiveValidators() external view returns (address[] memory){
-        return activeValidators;
+        return gActiveValidators;
     }
 
     function lazyPunish(address _val)
@@ -298,5 +302,10 @@ contract SystemContract is Initializable, Params, SafeSend {
 
     function isDoubleSignPunished(bytes32 punishHash) public view returns (bool) {
         return doubleSignPunished[punishHash];
+    }
+
+    function totalAssets(address val, address investor) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[val];
+        return iVal.selfStake(investor);
     }
 }

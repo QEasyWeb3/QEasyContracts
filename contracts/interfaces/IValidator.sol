@@ -8,6 +8,6 @@ interface IValidator {
     function addBonus() external payable;
     function getRate() external view returns (uint256);
     function totalStake() external view returns (uint256);
-    function selfStake() external view returns (uint256);
+    function selfStake(address val) external view returns (uint256);
     function validator() external view returns (address);
 }
