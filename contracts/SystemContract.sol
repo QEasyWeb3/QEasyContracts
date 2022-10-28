@@ -308,4 +308,9 @@ contract SystemContract is Initializable, Params, SafeSend {
         IValidator iVal = gValidatorsMap[val];
         return iVal.selfStake(investor);
     }
+
+    function totalStocks(address val, address investor) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[val];
+        return iVal.selfStocks(investor);
+    }
 }

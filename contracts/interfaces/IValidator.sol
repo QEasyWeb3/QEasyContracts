@@ -9,5 +9,6 @@ interface IValidator {
     function getRate() external view returns (uint256);
     function totalStake() external view returns (uint256);
     function selfStake(address val) external view returns (uint256);
+    function selfStocks(address val) external view returns (uint256);
     function validator() external view returns (address);
 }
