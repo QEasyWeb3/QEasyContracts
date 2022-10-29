@@ -11,9 +11,6 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     using SafeMath for uint256;
 
     uint256 public constant DefaultDefiScale = 50;     // Used for initialization of default fund pool
-    // #if !Mainnet
-    uint256 public constant RefundPendingTime = 0 days;// Only after waiting interval can the due funds be withdrawn
-    // #else
     uint256 public constant RefundPendingTime = 7 days;// Only after waiting interval can the due funds be withdrawn
     // #endif
 
