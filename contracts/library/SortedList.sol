@@ -28,13 +28,13 @@ library SortedLinkedList {
         }
 
         IValidator _prev = _list.prev[_value];
-        uint _totalStake = _value.totalStake();
+        uint _totalStake = _value.TotalStake();
         // not in list
         if (_prev == IValidator(address(0))) {
             //insert new
             _list.length++;
 
-            if (_totalStake <= _list.tail.totalStake()) {
+            if (_totalStake <= _list.tail.TotalStake()) {
                 _list.prev[_value] = _list.tail;
                 _list.next[_list.tail] = _value;
                 _list.tail = _value;
@@ -44,7 +44,7 @@ library SortedLinkedList {
 
             _prev = _list.tail;
         } else {
-            if (_totalStake <= _prev.totalStake()) {
+            if (_totalStake <= _prev.TotalStake()) {
                 return;
             }
 
@@ -57,7 +57,7 @@ library SortedLinkedList {
             }
         }
 
-        while (_prev != IValidator(address(0)) && _totalStake > _prev.totalStake()) {
+        while (_prev != IValidator(address(0)) && _totalStake > _prev.TotalStake()) {
             _prev = _list.prev[_prev];
         }
 
@@ -78,8 +78,8 @@ library SortedLinkedList {
     function lowerRanking(List storage _list, IValidator _value)
     internal {
         IValidator _next = _list.next[_value];
-        uint _totalStake = _value.totalStake();
-        if (_list.tail == _value || _next == IValidator(address(0)) || _next.totalStake() <= _totalStake) {
+        uint _totalStake = _value.TotalStake();
+        if (_list.tail == _value || _next == IValidator(address(0)) || _next.TotalStake() <= _totalStake) {
             return;
         }
 
@@ -91,7 +91,7 @@ library SortedLinkedList {
             _list.next[_list.prev[_value]] = _next;
         }
 
-        while (_next != IValidator(address(0)) && _next.totalStake() > _totalStake) {
+        while (_next != IValidator(address(0)) && _next.TotalStake() > _totalStake) {
             _next = _list.next[_next];
         }
 

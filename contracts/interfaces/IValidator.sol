@@ -2,13 +2,14 @@
 pragma solidity ^0.8.0;
 
 interface IValidator {
-    function buyStocks(address sender) external payable returns (uint256);
-    function sellStocks(address sender, uint256 stocks) external returns (uint256);
-    function refund(address payable sender) external;
-    function addBonus() external payable;
-    function getRate() external view returns (uint256);
-    function totalStake() external view returns (uint256);
-    function selfStake(address val) external view returns (uint256);
-    function selfStocks(address val) external view returns (uint256);
-    function validator() external view returns (address);
+    function BuyStocks(address sender) external payable returns (uint256);
+    function SellStocks(address sender, uint256 stocks) external returns (uint256);
+    function Refund(address payable sender) external;
+    function AddBonus() external payable;
+    function SingerRate() external view returns (uint256);
+    function TotalStake() external view returns (uint256);
+    function SelfAssets(address val) external view returns (uint256);
+    function SelfStocks(address val) external view returns (uint256);
+    function SingerAddress() external view returns (address);
+    function OwnerAddress() external view returns (address);
 }

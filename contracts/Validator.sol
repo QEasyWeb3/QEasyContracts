@@ -10,18 +10,16 @@ import "./library/SafeSend.sol";
 contract Validator is Params, SafeSend, IValidator, Ownable {
     using SafeMath for uint256;
 
-    uint256 public constant DefaultDefiScale = 50;     // Used for initialization of default fund pool
-    uint256 public constant RefundPendingTime = 7 days;// Only after waiting interval can the due funds be withdrawn
-    // #endif
-
+    uint256 public constant InitStockScale = 50;     // Used for initialization of default fund pool
     // self data
-    address public gValidator;   // Address of current node
-    address public gManager;     // Manager address of current node
-    uint256 public gRate;        // Commission sharing proportion of current node
+    address public gSingerAddress;   // Address of current node
+    address public gOwnerAddress;    // Manager address of current node
+    uint256 public gSingerRate;        // Commission sharing proportion of current node
     State public gState;         // State of current node
     bool public gAcceptDelegation;
-    // defi pool
-    address[] public gAllHolderAddrs;             // all holder address
+    uint256 public gBlockEpoch;                      // The cycle in which the corresponding update is performed
+    // stock pool
+    address[] public gAllHolderAddresses;             // all holder address
     mapping(address => bool) public gHolderExist; // holder address exist
     mapping(address => uint256) public gStockMap; // Current verifier's stock record
     uint256 public gTotalStock;                   // Total stocks of current node
@@ -30,103 +28,94 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     // Waiting for refund
     struct RefundPendingInfo {
         uint refundPendingWei;
-        uint lastRequestTime;
+        uint lastRequestBlockNum;
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address val, address manager, uint256 rate, uint256 stake, bool acceptDelegation, State state) {
-        gValidator = val;
-        gManager = manager;
-        gRate = rate;
+    constructor(address singer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, State state, uint256 epoch) {
+        gSingerAddress = singer;
+        gOwnerAddress = owner;
+        gSingerRate = rate;
         gAcceptDelegation = acceptDelegation;
         gState = state;
         uint256 stocks = stakeToStock(stake);
-        gStockMap[val] = stocks;
+        gStockMap[singer] = stocks;
         gTotalStock = stocks;
         gTotalStake = stake;
+        gBlockEpoch = epoch;
     }
 
-    function buyStocks(address sender) external override payable onlyOwner returns (uint256) {
-        address val = getManager(sender);
-        if (gHolderExist[val] == false) {
-            gAllHolderAddrs.push(val);
+    function BuyStocks(address owner) external override payable onlyOwner returns (uint256) {
+        if (gHolderExist[owner] == false) {
+            gAllHolderAddresses.push(owner);
         }
         uint256 stocks = stakeToStock(msg.value);
-        gStockMap[val] += stocks;
+        gStockMap[owner] += stocks;
         gTotalStock += stocks;
         gTotalStake += msg.value;
         return stocks;
     }
 
-    function sellStocks(address sender, uint256 stocks) external override onlyOwner returns (uint256) {
-        address val = getManager(sender);
-        require(gStockMap[val] >= stocks, "E25");
+    function SellStocks(address owner, uint256 stocks) external override onlyOwner returns (uint256) {
+        require(gStockMap[owner] >= stocks, "E25");
         uint256 stakes = stockToStake(stocks);
-        gStockMap[val] -= stocks;
+        gStockMap[owner] -= stocks;
         gTotalStock -= stocks;
         gTotalStake -= stakes;
-        gRefundMap[val].refundPendingWei += stakes;
-        gRefundMap[val].lastRequestTime = block.timestamp;
+        gRefundMap[owner].refundPendingWei += stakes;
+        gRefundMap[owner].lastRequestBlockNum = block.number;
         return stakes;
     }
 
-    function refund(address payable sender) external override onlyOwner{
-        address val = getManager(sender);
-        require(block.timestamp >= gRefundMap[val].lastRequestTime + RefundPendingTime, "E25");
-        require(gRefundMap[val].refundPendingWei > 0, "E26");
-
-        uint256 amount = gRefundMap[val].refundPendingWei;
-        gRefundMap[val].refundPendingWei = 0;
-        gRefundMap[val].lastRequestTime = block.timestamp;
-
-        sendValue(sender, amount);
+    function Refund(address payable owner) external override onlyOwner {
+        require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch, "E25");
+        require(gRefundMap[owner].refundPendingWei > 0, "E26");
+        uint256 amount = gRefundMap[owner].refundPendingWei;
+        gRefundMap[owner].refundPendingWei = 0;
+        gRefundMap[owner].lastRequestBlockNum = block.number;
+        sendValue(owner, amount);
     }
 
     function stakeToStock(uint256 stake) private view returns (uint256) {
         if(gTotalStake == 0) {
-            return stake.mul(DefaultDefiScale);
+            return stake.mul(InitStockScale);
         } 
         return stake.mul(gTotalStock).div(gTotalStake);
     }
 
     function stockToStake(uint256 stocks) private view returns (uint256) {
         if(gTotalStock == 0) {
-            return stocks.div(DefaultDefiScale);
+            return stocks.div(InitStockScale);
         } 
         return stocks.mul(gTotalStake).div(gTotalStock);
     }
 
-    function getManager(address sender) private view returns (address) {
-        address val;
-        if(gManager == sender) {
-            val = gValidator;
-        } else {
-            val = sender;
-        }
-        return val;
-    }
-
-    function addBonus() external override payable onlyOwner {
+    function AddBonus() external override payable onlyOwner {
         gTotalStake += msg.value;
     }
 
-    function getRate() external override view returns (uint256) {
-        return gRate;
+    function SingerRate() external override view returns (uint256) {
+        return gSingerRate;
     }
 
-    function totalStake() external override view returns (uint256) {
+    function TotalStake() external override view returns (uint256) {
         return gTotalStake;
     }
 
-    function selfStake(address val) external override view returns (uint256) {
-        uint256 stocks = gStockMap[val];
+    function SelfAssets(address owner) external override view returns (uint256) {
+        uint256 stocks = gStockMap[owner];
         return stockToStake(stocks);
     }
 
-    function selfStocks(address val) external override view returns (uint256) {
-        return gStockMap[val];
+    function SelfStocks(address owner) external override view returns (uint256) {
+        return gStockMap[owner];
     }
-    function validator() external override view returns (address) {
-        return gValidator;
+
+    function SingerAddress() external override view returns (address) {
+        return gSingerAddress;
+    }
+
+    function OwnerAddress() external override view returns (address) {
+        return gOwnerAddress;
     }
 }
