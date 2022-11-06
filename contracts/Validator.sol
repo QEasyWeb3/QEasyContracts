@@ -110,13 +110,13 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         return gTotalStock;
     }
 
-    function SelfAssets(address owner) external override view returns (uint256) {
-        uint256 stocks = gStockMap[owner];
+    function SelfAssets(address holder) external override view returns (uint256) {
+        uint256 stocks = gStockMap[holder];
         return stockToStake(stocks);
     }
 
-    function SelfStocks(address owner) external override view returns (uint256) {
-        return gStockMap[owner];
+    function SelfStocks(address holder) external override view returns (uint256) {
+        return gStockMap[holder];
     }
 
     function SingerAddress() external override view returns (address) {
