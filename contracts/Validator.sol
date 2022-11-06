@@ -7,19 +7,22 @@ import "./Params.sol";
 import "./interfaces/IValidator.sol";
 import "./library/SafeSend.sol";
 
+uint8 constant StateReady = 1;
+
 contract Validator is Params, SafeSend, IValidator, Ownable {
     using SafeMath for uint256;
 
-    uint256 public constant InitStockScale = 50;     // Used for initialization of default fund pool
+    uint256 public constant InitStockScale = 50;  // Used for initialization of default fund pool
+    uint256 public constant SafetyZone = 3;       // Safety zone epoch
     // self data
-    address public gSingerAddress;   // Address of current node
-    address public gOwnerAddress;    // Manager address of current node
-    uint256 public gSingerRate;        // Commission sharing proportion of current node
-    State public gState;         // State of current node
-    bool public gAcceptDelegation;
-    uint256 public gBlockEpoch;                      // The cycle in which the corresponding update is performed
+    address public gSingerAddress;                // Address of current node
+    address public gOwnerAddress;                 // Manager address of current node
+    uint256 public gSingerRate;                   // Commission sharing proportion of current node
+    uint8 public gSingerState;                    // State of current node
+    bool public gAcceptDelegation;                // Whether to accept the delegation from other addresses
+    uint256 public gBlockEpoch;                   // The cycle in which the corresponding update is performed
     // stock pool
-    address[] public gAllHolderAddresses;             // all holder address
+    address[] public gHolderAddresses;            // all holder address
     mapping(address => bool) public gHolderExist; // holder address exist
     mapping(address => uint256) public gStockMap; // Current verifier's stock record
     uint256 public gTotalStock;                   // Total stocks of current node
@@ -32,12 +35,12 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address singer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, State state, uint256 epoch) {
+    constructor(address singer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch) {
         gSingerAddress = singer;
         gOwnerAddress = owner;
         gSingerRate = rate;
         gAcceptDelegation = acceptDelegation;
-        gState = state;
+        gSingerState = state;
         uint256 stocks = stakeToStock(stake);
         gStockMap[singer] = stocks;
         gTotalStock = stocks;
@@ -47,7 +50,8 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
 
     function BuyStocks(address owner) external override payable onlyOwner returns (uint256) {
         if (gHolderExist[owner] == false) {
-            gAllHolderAddresses.push(owner);
+            gHolderAddresses.push(owner);
+            gHolderExist[owner] = true;
         }
         uint256 stocks = stakeToStock(msg.value);
         gStockMap[owner] += stocks;
@@ -68,7 +72,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
 
     function Refund(address payable owner) external override onlyOwner {
-        require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch, "E25");
+        require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch.mul(SafetyZone), "E25");
         require(gRefundMap[owner].refundPendingWei > 0, "E26");
         uint256 amount = gRefundMap[owner].refundPendingWei;
         gRefundMap[owner].refundPendingWei = 0;
@@ -102,6 +106,10 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         return gTotalStake;
     }
 
+    function TotalStock() external override view returns (uint256) {
+        return gTotalStock;
+    }
+
     function SelfAssets(address owner) external override view returns (uint256) {
         uint256 stocks = gStockMap[owner];
         return stockToStake(stocks);
@@ -117,5 +125,37 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
 
     function OwnerAddress() external override view returns (address) {
         return gOwnerAddress;
+    }
+
+    function SingerState() external override view returns (uint8) {
+        return gSingerState;
+    }
+
+    function IsAcceptDelegation() external override view returns (bool) {
+        return gAcceptDelegation;
+    }
+
+    function IsHolderExist(address holder) external override view returns (bool) {
+        return gHolderExist[holder];
+    }
+
+    function HolderAddressesLength() external override view returns (uint256) {
+        return gHolderAddresses.length;
+    }
+
+    function HolderAddresses(uint256 startIndex, uint256 count) external override view returns (address[] memory) {
+        address[] memory holderAddresses = new address[](count);
+        uint256 length = gHolderAddresses.length;
+        if (length == 0 || startIndex > (length - 1)) {
+            return holderAddresses;
+        }
+        uint256 diffCount = length - startIndex;
+        if (diffCount < count) {
+            count = diffCount;
+        }
+        for (uint256 i = 0; i < count; i++) {
+            holderAddresses[i] = gHolderAddresses[startIndex + i];
+        }
+        return holderAddresses;
     }
 }

@@ -19,11 +19,9 @@ contract SystemContract is Initializable, Params, SafeSend {
     uint256 public gMinSelfStake;                    // Become the verifier's own minimum stake
     address payable public gCommunityAddress;        //
     address public gAdminAddress;
-    uint8 public gMaxValidators;                     // Maximum number of activation verifiers supported
     uint8 public gShareOutBonusPercent;              //
 
     uint256 public gTotalStake;                      // Total stake amount of the whole network
-    uint256 public gTotalPendingShare;               // Total amount to be share
     address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
     mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
@@ -93,17 +91,15 @@ contract SystemContract is Initializable, Params, SafeSend {
         _;
     }
 
-    function initialize(address adminAddress, uint8 maxValidators, uint256 epoch, uint256 minSelfStake,
+    function initialize(address adminAddress, uint256 epoch, uint256 minSelfStake,
         address payable communityAddress, uint8 shareOutBonusPercent)
         external
-        onlyValid100(maxValidators)
-        onlyGreaterZero(maxValidators)
+        onlyValidAddress(adminAddress)
         onlyGreaterZero(epoch)
         onlyValidAddress(communityAddress)
         onlyValid100(shareOutBonusPercent)
         initializer {
         gAdminAddress = adminAddress;
-        gMaxValidators = maxValidators;
         gBlockEpoch = epoch;
         gMinSelfStake = minSelfStake;
         gCommunityAddress = communityAddress;
@@ -119,7 +115,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyGreaterZero(stake)
         onlyGenesisBlock
         onlyInitialized {
-        IValidator iVal = new Validator(singer, owner, rate, stake, acceptDelegation, State.Ready, gBlockEpoch);
+        IValidator iVal = new Validator(singer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch);
         gValidatorsMap[singer] = iVal;
         topValidators.improveRanking(iVal);
         iVal.BuyStocks{value : stake}(owner);
@@ -137,20 +133,20 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyValid100(rate)
         onlyInitialized {
         require(msg.value >= gMinSelfStake, "E20");
-        IValidator iVal = new Validator(singer, msg.sender, rate, msg.value, acceptDelegation, State.Ready, gBlockEpoch);
+        IValidator iVal = new Validator(singer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch);
         gValidatorsMap[singer] = iVal;
         topValidators.improveRanking(iVal);
         iVal.BuyStocks{value : msg.value}(msg.sender);
         gTotalStake = gTotalStake.add(msg.value);
     }
 
-    function BuyStocks(address val)
+    function BuyStocks(address singer)
         external
         payable
         onlyGreaterZero(msg.value)
-        onlyExistValidator(val)
+        onlyExistValidator(singer)
         onlyNotContract(msg.sender) {
-        IValidator iVal = gValidatorsMap[val];
+        IValidator iVal = gValidatorsMap[singer];
         iVal.BuyStocks{value : msg.value}(msg.sender);
         if(iVal.SelfAssets(iVal.OwnerAddress()) >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
@@ -158,12 +154,12 @@ contract SystemContract is Initializable, Params, SafeSend {
         gTotalStake = gTotalStake.add(msg.value);
     }
 
-    function SellStocks(address val, uint256 stocks)
+    function SellStocks(address singer, uint256 stocks)
         external
         onlyGreaterZero(stocks)
-        onlyExistValidator(val)
+        onlyExistValidator(singer)
         onlyNotContract(msg.sender) {
-        IValidator iVal = gValidatorsMap[val];
+        IValidator iVal = gValidatorsMap[singer];
         uint256 stakes = iVal.SellStocks(msg.sender, stocks);
         if(iVal.SelfAssets(iVal.OwnerAddress()) < gMinSelfStake) {
             topValidators.removeRanking(iVal);
@@ -173,11 +169,11 @@ contract SystemContract is Initializable, Params, SafeSend {
         gTotalStake = gTotalStake.sub(stakes);
     }
 
-    function Refund(address val)
+    function Refund(address singer)
         external
-        onlyExistValidator(val) {
+        onlyExistValidator(singer) {
         address payable sender = payable(msg.sender);
-        IValidator iVal = gValidatorsMap[val];
+        IValidator iVal = gValidatorsMap[singer];
         iVal.Refund(sender);
     }
 
@@ -187,48 +183,39 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyLocal
         onlyOperateOnce(Operation.ShareOutBonus) {
         if (msg.value > 0) {
-            gTotalPendingShare += msg.value;
-        }
-    }
-
-    function shareOutBonusAtBlockEpoch() private {
-        uint cnt = gActiveValidators.length;
-        if (gTotalPendingShare > 0 && cnt > 0) {
-            uint256 amount = gTotalPendingShare;
-            gTotalPendingShare = 0;
-            uint bonusSingle = amount.mul(gShareOutBonusPercent).div(RateDenominator).div(cnt);
-            uint cpFee = amount - (bonusSingle * cnt);
-            for (uint i = 0; i < cnt; i++) {
-                address val = gActiveValidators[i];
-                IValidator iVal = gValidatorsMap[val];
-                uint256 rate = iVal.SingerRate();
-                uint256 bonusInvestor = bonusSingle.mul(rate).div(RateDenominator);
-                uint256 bonusValidator = bonusSingle - bonusInvestor;
-                if(bonusInvestor > 0) {
-                    iVal.AddBonus{value : bonusInvestor}();
+            uint cnt = gActiveValidators.length;
+            if (cnt > 0) {
+                uint256 amount = msg.value;
+                uint bonusSingle = amount.mul(gShareOutBonusPercent).div(RateDenominator).div(cnt);
+                uint cpFee = amount - (bonusSingle * cnt);
+                for (uint i = 0; i < cnt; i++) {
+                    address val = gActiveValidators[i];
+                    IValidator iVal = gValidatorsMap[val];
+                    uint256 rate = iVal.SingerRate();
+                    uint256 bonusInvestor = bonusSingle.mul(rate).div(RateDenominator);
+                    uint256 bonusValidator = bonusSingle - bonusInvestor;
+                    if(bonusInvestor > 0) {
+                        iVal.AddBonus{value : bonusInvestor}();
+                    }
+                    if(bonusValidator > 0) {
+                        iVal.BuyStocks{value : bonusValidator}(iVal.OwnerAddress());
+                    }
                 }
-                if(bonusValidator > 0) {
-                    iVal.BuyStocks{value : bonusValidator}(iVal.OwnerAddress());
+                if(cpFee > 0) {
+                    sendValue(gCommunityAddress, cpFee);
                 }
-            }
-            if(cpFee > 0) {
-                sendValue(gCommunityAddress, cpFee);
             }
         }
     }
 
-    function getTopValidators(uint8 _count) external view returns (address[] memory) {
-        // Use default MaxValidators if _count is not provided.
-        if (_count == 0) {
-            _count = gMaxValidators;
-        }
+    function getTopValidators(uint8 count) external view returns (address[] memory) {
         // set max limit: min(_count, list.length)
-        if (_count > topValidators.length) {
-            _count = topValidators.length;
+        if (count > topValidators.length) {
+            count = topValidators.length;
         }
-        address[] memory _topValidators = new address[](_count);
+        address[] memory _topValidators = new address[](count);
         IValidator cur = topValidators.head;
-        for (uint8 i = 0; i < _count; i++) {
+        for (uint8 i = 0; i < count; i++) {
             _topValidators[i] = cur.SingerAddress();
             cur = topValidators.next[cur];
         }
@@ -243,42 +230,35 @@ contract SystemContract is Initializable, Params, SafeSend {
     {
         require(newSet.length > 0, "E18");
         gActiveValidators = newSet;
-        shareOutBonusAtBlockEpoch();
     }
 
     function getActiveValidators() external view returns (address[] memory){
         return gActiveValidators;
     }
 
-    function lazyPunish(address _val)
+    function lazyPunish(address singer)
         external
-            // #if Mainnet
         onlyLocal
-            // #endif
-        onlyExistValidator(_val)
+        onlyExistValidator(singer)
         onlyOperateOnce(Operation.LazyPunish){
         // TODO
     }
 
     function decreaseMissedBlocksCounter()
         external
-            // #if Mainnet
         onlyLocal
-            // #endif
         onlyBlockEpoch
         onlyOperateOnce(Operation.DecreaseMissingBlockCounter){
         // TODO
     }
 
-    function doubleSignPunish(bytes32 _punishHash, address _val)
+    function doubleSignPunish(bytes32 punishHash, address singer)
     external
-        // #if Mainnet
     onlyLocal
-        // #endif
-    onlyExistValidator(_val)
-    onlyNotDoubleSignPunished(_punishHash)
+    onlyExistValidator(singer)
+    onlyNotDoubleSignPunished(punishHash)
     {
-        doubleSignPunished[_punishHash] = true;
+        doubleSignPunished[punishHash] = true;
         // TODO
     }
 
@@ -286,13 +266,58 @@ contract SystemContract is Initializable, Params, SafeSend {
         return doubleSignPunished[punishHash];
     }
 
-    function totalAssets(address val, address investor) public view returns (uint256) {
-        IValidator iVal = gValidatorsMap[val];
-        return iVal.SelfAssets(investor);
+    function TotalAssets(address singer, address holder) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.SelfAssets(holder);
     }
 
-    function totalStocks(address val, address investor) public view returns (uint256) {
-        IValidator iVal = gValidatorsMap[val];
-        return iVal.SelfStocks(investor);
+    function TotalStocks(address singer, address holder) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.SelfStocks(holder);
+    }
+
+    function TotalStake(address singer) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.TotalStake();
+    }
+
+    function TotalStock(address singer) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.TotalStock();
+    }
+
+    function SingerRate(address singer) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.SingerRate();
+    }
+
+    function OwnerAddress(address singer) public view returns (address) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.OwnerAddress();
+    }
+
+    function SingerState(address singer) public view returns (uint8) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.SingerState();
+    }
+
+    function IsAcceptDelegation(address singer) public view returns (bool) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.IsAcceptDelegation();
+    }
+
+    function IsHolderExist(address singer, address holder) public view returns (bool) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.IsHolderExist(holder);
+    }
+
+    function HolderAddressesLength(address singer) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.HolderAddressesLength();
+    }
+
+    function HolderAddresses(address singer, uint256 startIndex, uint256 count) public view returns (address[] memory) {
+        IValidator iVal = gValidatorsMap[singer];
+        return iVal.HolderAddresses(startIndex, count);
     }
 }
