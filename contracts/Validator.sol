@@ -144,15 +144,15 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
 
     function HolderAddresses(uint256 startIndex, uint256 count) external override view returns (address[] memory) {
-        address[] memory holderAddresses = new address[](count);
         uint256 length = gHolderAddresses.length;
         if (length == 0 || startIndex > (length - 1)) {
-            return holderAddresses;
+            return new address[](0);
         }
         uint256 diffCount = length - startIndex;
         if (diffCount < count) {
             count = diffCount;
         }
+        address[] memory holderAddresses = new address[](count);
         for (uint256 i = 0; i < count; i++) {
             holderAddresses[i] = gHolderAddresses[startIndex + i];
         }
