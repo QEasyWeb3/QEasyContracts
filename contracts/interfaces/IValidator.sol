@@ -6,14 +6,14 @@ interface IValidator {
     function SellStocks(address sender, uint256 stocks) external returns (uint256);
     function Refund(address payable sender) external;
     function AddBonus() external payable;
-    function SingerRate() external view returns (uint256);
+    function SignerRate() external view returns (uint256);
     function TotalStake() external view returns (uint256);
     function TotalStock() external view returns (uint256);
     function SelfAssets(address holder) external view returns (uint256);
     function SelfStocks(address holder) external view returns (uint256);
-    function SingerAddress() external view returns (address);
+    function SignerAddress() external view returns (address);
     function OwnerAddress() external view returns (address);
-    function SingerState() external view returns (uint8);
+    function SignerState() external view returns (uint8);
     function IsAcceptDelegation() external view returns (bool);
     function IsHolderExist(address holder) external view returns (bool);
     function HolderAddressesLength() external view returns (uint256);

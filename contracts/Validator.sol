@@ -15,10 +15,10 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     uint256 public constant InitStockScale = 50;  // Used for initialization of default fund pool
     uint256 public constant SafetyZone = 3;       // Safety zone epoch
     // self data
-    address public gSingerAddress;                // Address of current node
+    address public gSignerAddress;                // Address of current node
     address public gOwnerAddress;                 // Manager address of current node
-    uint256 public gSingerRate;                   // Commission sharing proportion of current node
-    uint8 public gSingerState;                    // State of current node
+    uint256 public gSignerRate;                   // Commission sharing proportion of current node
+    uint8 public gSignerState;                    // State of current node
     bool public gAcceptDelegation;                // Whether to accept the delegation from other addresses
     uint256 public gBlockEpoch;                   // The cycle in which the corresponding update is performed
     // stock pool
@@ -35,14 +35,14 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address singer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch) {
-        gSingerAddress = singer;
+    constructor(address signer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch) {
+        gSignerAddress = signer;
         gOwnerAddress = owner;
-        gSingerRate = rate;
+        gSignerRate = rate;
         gAcceptDelegation = acceptDelegation;
-        gSingerState = state;
+        gSignerState = state;
         uint256 stocks = stakeToStock(stake);
-        gStockMap[singer] = stocks;
+        gStockMap[signer] = stocks;
         gTotalStock = stocks;
         gTotalStake = stake;
         gBlockEpoch = epoch;
@@ -98,8 +98,8 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         gTotalStake += msg.value;
     }
 
-    function SingerRate() external override view returns (uint256) {
-        return gSingerRate;
+    function SignerRate() external override view returns (uint256) {
+        return gSignerRate;
     }
 
     function TotalStake() external override view returns (uint256) {
@@ -119,16 +119,16 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         return gStockMap[holder];
     }
 
-    function SingerAddress() external override view returns (address) {
-        return gSingerAddress;
+    function SignerAddress() external override view returns (address) {
+        return gSignerAddress;
     }
 
     function OwnerAddress() external override view returns (address) {
         return gOwnerAddress;
     }
 
-    function SingerState() external override view returns (uint8) {
-        return gSingerState;
+    function SignerState() external override view returns (uint8) {
+        return gSignerState;
     }
 
     function IsAcceptDelegation() external override view returns (bool) {
