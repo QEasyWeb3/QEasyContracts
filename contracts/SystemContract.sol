@@ -268,11 +268,10 @@ contract SystemContract is Initializable, SafeSend {
     }
 
     function updateActiveValidatorSet(address[] memory newSet)
-    external
-    onlyLocal
-    onlyOperateOnce(Operation.UpdateValidators)
-    onlyBlockEpoch
-    {
+        external
+        onlyLocal
+        onlyOperateOnce(Operation.UpdateValidators)
+        onlyBlockEpoch {
         require(newSet.length > 0, "E18");
         gActiveValidators = newSet;
     }
@@ -309,7 +308,6 @@ contract SystemContract is Initializable, SafeSend {
             topValidators.removeRanking(iVal);
             lazyPunishRecords[signer].missedBlocksCounter = 0;
         }
-
         emit LogLazyPunishValidator(signer, block.timestamp);
     }
 
@@ -321,11 +319,9 @@ contract SystemContract is Initializable, SafeSend {
         if (lazyPunishedSigners.length == 0) {
             return;
         }
-
         uint cnt = lazyPunishedSigners.length;
         for (uint256 i = cnt; i > 0; i--) {
             address signer = lazyPunishedSigners[i - 1];
-
             if (lazyPunishRecords[signer].missedBlocksCounter > DecreaseRate) {
                 lazyPunishRecords[signer].missedBlocksCounter -= DecreaseRate;
             } else {
@@ -343,16 +339,14 @@ contract SystemContract is Initializable, SafeSend {
                 cnt -= 1;
             }
         }
-
         emit LogDecreaseMissedBlocksCounter();
     }
 
     function doubleSignPunish(bytes32 punishHash, address signer)
-    external
-    onlyLocal
-    onlyExistValidator(signer)
-    onlyNotDoubleSignPunished(punishHash)
-    {
+        external
+        onlyLocal
+        onlyExistValidator(signer)
+        onlyNotDoubleSignPunished(punishHash) {
         doubleSignPunished[punishHash] = true;
         IValidator iVal = gValidatorsMap[signer];
         uint256 finalValue = 0;
