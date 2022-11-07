@@ -14,7 +14,9 @@ contract SystemContract is Initializable, Params, SafeSend {
     using Address for address;
     using SortedLinkedList for SortedLinkedList.List;
 
-    uint256 public constant RateDenominator = 100;   // rate denominator
+    uint256 public constant DecreaseRate = 4;        // the allowable amount of missing blocks in one epoch for each validator
+
+
     uint256 public gBlockEpoch;                      // The cycle in which the corresponding update is performed
     uint256 public gMinSelfStake;                    // Become the verifier's own minimum stake
     address payable public gCommunityAddress;        //
@@ -27,9 +29,20 @@ contract SystemContract is Initializable, Params, SafeSend {
     mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
 
+    struct LazyPunishRecord {
+        uint256 missedBlocksCounter;
+        uint256 index;
+        bool exist;
+    }
     enum Operation {ShareOutBonus, UpdateValidators, LazyPunish, DecreaseMissingBlockCounter}
     mapping(uint256 => mapping(Operation => bool)) operationsDone;
+    mapping(address => LazyPunishRecord) lazyPunishRecords;
+    address[] public lazyPunishedSigners;
     mapping(bytes32 => bool) public doubleSignPunished;
+
+    event LogDecreaseMissedBlocksCounter();
+    event LogLazyPunishValidator(address indexed signer, uint256 time);
+    event LogDoubleSignPunishValidator(address indexed signer, uint256 time);
 
     modifier onlyLocal() {
         require(msg.sender == address(0x0000000000000000000000000000000000000000), "E00");
@@ -116,7 +129,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyGreaterZero(stake)
         onlyGenesisBlock
         onlyInitialized {
-        IValidator iVal = new Validator(signer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch);
+        IValidator iVal = new Validator(signer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
         uint256 stocks = iVal.BuyStocks{value : stake}(owner);
@@ -135,12 +148,33 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyValid100(rate)
         onlyInitialized {
         require(msg.value >= gMinSelfStake, "E20");
-        IValidator iVal = new Validator(signer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch);
+        IValidator iVal = new Validator(signer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
         uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         gTotalStake = gTotalStake.add(msg.value);
         gTotalStock = gTotalStock.add(stocks);
+    }
+
+    function ReactivateValidator(address signer)
+    external
+    payable
+    onlyExistValidator(signer)
+    onlyNotContract(signer)
+    onlyInitialized {
+        IValidator iVal = gValidatorsMap[signer];
+        require(msg.sender == iVal.OwnerAddress(), "E22");
+        require(iVal.SignerState() == StateExit || iVal.SignerState() == StateLazyPunish, "E55");
+        if(iVal.SignerState() == StateLazyPunish) {
+            require(msg.value >= gMinSelfStake, "E20");
+        }
+        if (msg.value > 0) {
+            uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
+            gTotalStake = gTotalStake.add(msg.value);
+            gTotalStock = gTotalStock.add(stocks);
+        }
+        iVal.SwitchState(StateReady);
+        topValidators.improveRanking(iVal);
     }
 
     function BuyStocks(address signer)
@@ -150,6 +184,7 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(signer)
         onlyNotContract(msg.sender) {
         IValidator iVal = gValidatorsMap[signer];
+        require(iVal.SignerState() == StateReady, "E33");
         uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         if(iVal.SelfAssets(iVal.OwnerAddress()) >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
@@ -164,6 +199,9 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(signer)
         onlyNotContract(msg.sender) {
         IValidator iVal = gValidatorsMap[signer];
+        if (msg.sender == iVal.OwnerAddress()) {
+            require(iVal.SignerState() != StateDoubleSignPunish, "E56");
+        }
         uint256 stakes = iVal.SellStocks(msg.sender, stocks);
         if(iVal.SelfAssets(iVal.OwnerAddress()) < gMinSelfStake) {
             topValidators.removeRanking(iVal);
@@ -248,7 +286,31 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyLocal
         onlyExistValidator(signer)
         onlyOperateOnce(Operation.LazyPunish){
-        // TODO
+        if (!lazyPunishRecords[signer].exist) {
+            lazyPunishRecords[signer].index = lazyPunishedSigners.length;
+            lazyPunishedSigners.push(signer);
+            lazyPunishRecords[signer].exist = true;
+        }
+        lazyPunishRecords[signer].missedBlocksCounter++;
+        uint256 removeThreshold = gBlockEpoch / gActiveValidators.length;
+        uint256 lazyPunishThreshold = removeThreshold / 2;
+        IValidator iVal = gValidatorsMap[signer];
+        uint256 finalValue = 0;
+        uint256 ownerDiffStock = 0;
+        if (lazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
+            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(4));
+            gTotalStake = gTotalStake.sub(finalValue);
+            gTotalStock = gTotalStock.sub(ownerDiffStock);
+        } else if (lazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
+            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(2));
+            gTotalStake = gTotalStake.sub(finalValue);
+            gTotalStock = gTotalStock.sub(ownerDiffStock);
+            iVal.SwitchState(StateLazyPunish);
+            topValidators.removeRanking(iVal);
+            lazyPunishRecords[signer].missedBlocksCounter = 0;
+        }
+
+        emit LogLazyPunishValidator(signer, block.timestamp);
     }
 
     function decreaseMissedBlocksCounter()
@@ -256,7 +318,33 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyLocal
         onlyBlockEpoch
         onlyOperateOnce(Operation.DecreaseMissingBlockCounter){
-        // TODO
+        if (lazyPunishedSigners.length == 0) {
+            return;
+        }
+
+        uint cnt = lazyPunishedSigners.length;
+        for (uint256 i = cnt; i > 0; i--) {
+            address signer = lazyPunishedSigners[i - 1];
+
+            if (lazyPunishRecords[signer].missedBlocksCounter > DecreaseRate) {
+                lazyPunishRecords[signer].missedBlocksCounter -= DecreaseRate;
+            } else {
+                if (i != cnt) {
+                    // not the last one, swap
+                    address tail = lazyPunishedSigners[cnt - 1];
+                    lazyPunishedSigners[i - 1] = tail;
+                    lazyPunishRecords[tail].index = i - 1;
+                }
+                // delete the last one
+                lazyPunishedSigners.pop();
+                lazyPunishRecords[signer].missedBlocksCounter = 0;
+                lazyPunishRecords[signer].index = 0;
+                lazyPunishRecords[signer].exist = false;
+                cnt -= 1;
+            }
+        }
+
+        emit LogDecreaseMissedBlocksCounter();
     }
 
     function doubleSignPunish(bytes32 punishHash, address signer)
@@ -266,7 +354,15 @@ contract SystemContract is Initializable, Params, SafeSend {
     onlyNotDoubleSignPunished(punishHash)
     {
         doubleSignPunished[punishHash] = true;
-        // TODO
+        IValidator iVal = gValidatorsMap[signer];
+        uint256 finalValue = 0;
+        uint256 ownerDiffStock = 0;
+        (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake);
+        gTotalStake = gTotalStake.sub(finalValue);
+        gTotalStock = gTotalStock.sub(ownerDiffStock);
+        iVal.SwitchState(StateDoubleSignPunish);
+        topValidators.removeRanking(iVal);
+        emit LogDoubleSignPunishValidator(signer, block.timestamp);
     }
 
     function isDoubleSignPunished(bytes32 punishHash) public view returns (bool) {

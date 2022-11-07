@@ -8,6 +8,11 @@ import "./interfaces/IValidator.sol";
 import "./library/SafeSend.sol";
 
 uint8 constant StateReady = 1;
+uint8 constant StateExit = 2;
+uint8 constant StateLazyPunish = 3;
+uint8 constant StateDoubleSignPunish = 4;
+
+uint256 constant RateDenominator = 100;// rate denominator
 
 contract Validator is Params, SafeSend, IValidator, Ownable {
     using SafeMath for uint256;
@@ -21,6 +26,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     uint8 public gSignerState;                    // State of current node
     bool public gAcceptDelegation;                // Whether to accept the delegation from other addresses
     uint256 public gBlockEpoch;                   // The cycle in which the corresponding update is performed
+    address payable public gCommunityAddress;
     // stock pool
     address[] public gHolderAddresses;            // all holder address
     mapping(address => bool) public gHolderExist; // holder address exist
@@ -35,7 +41,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address signer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch) {
+    constructor(address signer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch, address payable communityAddress) {
         gSignerAddress = signer;
         gOwnerAddress = owner;
         gSignerRate = rate;
@@ -46,6 +52,7 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
         gTotalStock = stocks;
         gTotalStake = stake;
         gBlockEpoch = epoch;
+        gCommunityAddress = communityAddress;
     }
 
     function BuyStocks(address owner) external override payable onlyOwner returns (uint256) {
@@ -96,6 +103,52 @@ contract Validator is Params, SafeSend, IValidator, Ownable {
 
     function AddBonus() external override payable onlyOwner {
         gTotalStake += msg.value;
+    }
+
+    function SwitchState(uint8 state) external override onlyOwner {
+        gSignerState = state;
+    }
+
+    function LazyPunish(uint256 amercement) external override onlyOwner returns (uint256, uint256) {
+        uint256 finalValue = amercement;
+        uint256 ownerStocks = gStockMap[gOwnerAddress];
+        uint256 ownerStake = stockToStake(ownerStocks);
+
+        uint256 punishInvestor = amercement.mul(gSignerState).div(RateDenominator);
+        uint256 ownerPunish = amercement - punishInvestor;
+        uint256 ownerArrears = 0;
+        uint256 ownerDiffStock = 0;
+        uint256 ownerDiffStake = 0;
+        if(ownerStake > ownerPunish){
+            ownerDiffStake = ownerPunish;
+            ownerDiffStock = stakeToStock(ownerPunish);
+            gStockMap[gOwnerAddress] -= ownerDiffStock;
+        } else {
+            ownerDiffStake = ownerStake;
+            ownerDiffStock = gStockMap[gOwnerAddress];
+            ownerArrears = ownerPunish - ownerStake;
+            uint256 amount = gRefundMap[gOwnerAddress].refundPendingWei;
+            if(amount >= ownerArrears) {
+                gRefundMap[gOwnerAddress].refundPendingWei = amount - ownerArrears;
+                ownerArrears = 0;
+            } else {
+                gRefundMap[gOwnerAddress].refundPendingWei = 0;
+                ownerArrears -= amount;
+            }
+            gStockMap[gOwnerAddress] = 0;
+        }
+        uint256 totalDiffStake = ownerDiffStake + ownerArrears + punishInvestor;
+        if (gTotalStake >= totalDiffStake) {
+            gTotalStake -= totalDiffStake;
+        } else {
+            finalValue = gTotalStake;
+            gTotalStake = 0;
+        }
+        gTotalStock -= ownerDiffStock;
+        if (finalValue > 0) {
+            sendValue(gCommunityAddress, finalValue);
+        }
+        return (finalValue, ownerDiffStock);
     }
 
     function SignerRate() external override view returns (uint256) {
