@@ -303,6 +303,7 @@ contract SystemContract is Initializable, SafeSend {
             (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(4));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
+            topValidators.lowerRanking(iVal);
         } else if (gLazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
             (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(2));
             gTotalStake = gTotalStake.sub(finalValue);
