@@ -26,6 +26,7 @@ contract SystemContract is Initializable, SafeSend {
     uint256 public gTotalStake;                      // Total stake amount of the whole network
     uint256 public gTotalStock;                      // Total stock amount of the whole network
     address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
+    address[] public gAllValidatorAddresses;
     mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
 
@@ -36,8 +37,8 @@ contract SystemContract is Initializable, SafeSend {
     }
     enum Operation {ShareOutBonus, UpdateValidators, LazyPunish, DecreaseMissingBlockCounter}
     mapping(uint256 => mapping(Operation => bool)) operationsDone;
-    mapping(address => LazyPunishRecord) lazyPunishRecords;
-    address[] public lazyPunishedSigners;
+    mapping(address => LazyPunishRecord) gLazyPunishRecords;
+    address[] public gLazyPunishedSigners;
     mapping(bytes32 => bool) public doubleSignPunished;
 
     event LogDecreaseMissedBlocksCounter();
@@ -135,6 +136,7 @@ contract SystemContract is Initializable, SafeSend {
         uint256 stocks = iVal.BuyStocks{value : stake}(owner);
         gTotalStake = gTotalStake.add(stake);
         gTotalStock = gTotalStock.add(stocks);
+        gAllValidatorAddresses.push(signer);
     }
 
     function RegisterValidator(address signer, uint256 rate, bool acceptDelegation)
@@ -154,6 +156,7 @@ contract SystemContract is Initializable, SafeSend {
         uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         gTotalStake = gTotalStake.add(msg.value);
         gTotalStock = gTotalStock.add(stocks);
+        gAllValidatorAddresses.push(signer);
     }
 
     function ReactivateValidator(address signer)
@@ -285,28 +288,28 @@ contract SystemContract is Initializable, SafeSend {
         onlyLocal
         onlyExistValidator(signer)
         onlyOperateOnce(Operation.LazyPunish){
-        if (!lazyPunishRecords[signer].exist) {
-            lazyPunishRecords[signer].index = lazyPunishedSigners.length;
-            lazyPunishedSigners.push(signer);
-            lazyPunishRecords[signer].exist = true;
+        if (!gLazyPunishRecords[signer].exist) {
+            gLazyPunishRecords[signer].index = gLazyPunishedSigners.length;
+            gLazyPunishedSigners.push(signer);
+            gLazyPunishRecords[signer].exist = true;
         }
-        lazyPunishRecords[signer].missedBlocksCounter++;
+        gLazyPunishRecords[signer].missedBlocksCounter++;
         uint256 removeThreshold = gBlockEpoch / gActiveValidators.length;
         uint256 lazyPunishThreshold = removeThreshold / 2;
         IValidator iVal = gValidatorsMap[signer];
         uint256 finalValue = 0;
         uint256 ownerDiffStock = 0;
-        if (lazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
+        if (gLazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
             (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(4));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
-        } else if (lazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
+        } else if (gLazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
             (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(2));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
             iVal.SwitchState(StateLazyPunish);
             topValidators.removeRanking(iVal);
-            lazyPunishRecords[signer].missedBlocksCounter = 0;
+            gLazyPunishRecords[signer].missedBlocksCounter = 0;
         }
         emit LogLazyPunishValidator(signer, block.timestamp);
     }
@@ -316,26 +319,26 @@ contract SystemContract is Initializable, SafeSend {
         onlyLocal
         onlyBlockEpoch
         onlyOperateOnce(Operation.DecreaseMissingBlockCounter){
-        if (lazyPunishedSigners.length == 0) {
+        if (gLazyPunishedSigners.length == 0) {
             return;
         }
-        uint cnt = lazyPunishedSigners.length;
+        uint cnt = gLazyPunishedSigners.length;
         for (uint256 i = cnt; i > 0; i--) {
-            address signer = lazyPunishedSigners[i - 1];
-            if (lazyPunishRecords[signer].missedBlocksCounter > DecreaseRate) {
-                lazyPunishRecords[signer].missedBlocksCounter -= DecreaseRate;
+            address signer = gLazyPunishedSigners[i - 1];
+            if (gLazyPunishRecords[signer].missedBlocksCounter > DecreaseRate) {
+                gLazyPunishRecords[signer].missedBlocksCounter -= DecreaseRate;
             } else {
                 if (i != cnt) {
                     // not the last one, swap
-                    address tail = lazyPunishedSigners[cnt - 1];
-                    lazyPunishedSigners[i - 1] = tail;
-                    lazyPunishRecords[tail].index = i - 1;
+                    address tail = gLazyPunishedSigners[cnt - 1];
+                    gLazyPunishedSigners[i - 1] = tail;
+                    gLazyPunishRecords[tail].index = i - 1;
                 }
                 // delete the last one
-                lazyPunishedSigners.pop();
-                lazyPunishRecords[signer].missedBlocksCounter = 0;
-                lazyPunishRecords[signer].index = 0;
-                lazyPunishRecords[signer].exist = false;
+                gLazyPunishedSigners.pop();
+                gLazyPunishRecords[signer].missedBlocksCounter = 0;
+                gLazyPunishRecords[signer].index = 0;
+                gLazyPunishRecords[signer].exist = false;
                 cnt -= 1;
             }
         }
@@ -416,5 +419,17 @@ contract SystemContract is Initializable, SafeSend {
     function HolderAddresses(address signer, uint256 startIndex, uint256 count) public view returns (address[] memory) {
         IValidator iVal = gValidatorsMap[signer];
         return iVal.HolderAddresses(startIndex, count);
+    }
+
+    function AllValidatorsLength() external view returns (uint256){
+        return gAllValidatorAddresses.length;
+    }
+
+    function LazyPunishedSignersLength() public view returns (uint256) {
+        return gLazyPunishedSigners.length;
+    }
+
+    function LazyPunishMissedBlocksCounter(address signer) public view returns (uint256) {
+        return gLazyPunishRecords[signer].missedBlocksCounter;
     }
 }
