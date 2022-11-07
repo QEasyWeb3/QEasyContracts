@@ -293,24 +293,27 @@ contract SystemContract is Initializable, SafeSend {
             gLazyPunishedSigners.push(signer);
             gLazyPunishRecords[signer].exist = true;
         }
-        gLazyPunishRecords[signer].missedBlocksCounter++;
-        uint256 removeThreshold = gBlockEpoch / gActiveValidators.length;
-        uint256 lazyPunishThreshold = removeThreshold / 2;
         IValidator iVal = gValidatorsMap[signer];
+        if (iVal.SignerState() == StateLazyPunish) {
+            return;
+        }
+        gLazyPunishRecords[signer].missedBlocksCounter++;
+        uint256 removeThreshold = (gBlockEpoch / gActiveValidators.length / 4).mul(4);
+        uint256 lazyPunishThreshold = removeThreshold / 2;
         uint256 finalValue = 0;
         uint256 ownerDiffStock = 0;
-        if (gLazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
-            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(4));
-            gTotalStake = gTotalStake.sub(finalValue);
-            gTotalStock = gTotalStock.sub(ownerDiffStock);
-            topValidators.lowerRanking(iVal);
-        } else if (gLazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
-            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(2));
+        if (gLazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
+            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(5));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
             iVal.SwitchState(StateLazyPunish);
             topValidators.removeRanking(iVal);
             gLazyPunishRecords[signer].missedBlocksCounter = 0;
+        } else if (gLazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
+            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(10));
+            gTotalStake = gTotalStake.sub(finalValue);
+            gTotalStock = gTotalStock.sub(ownerDiffStock);
+            topValidators.lowerRanking(iVal);
         }
         emit LogLazyPunishValidator(signer, block.timestamp);
     }
