@@ -14,7 +14,7 @@ uint8 constant StateDoubleSignPunish = 4;
 
 uint256 constant RateDenominator = 100;// rate denominator
 
-contract Validator is Params, SafeSend, IValidator, Ownable {
+contract Validator is SafeSend, IValidator, Ownable {
     using SafeMath for uint256;
 
     uint256 public constant InitStockScale = 50;  // Used for initialization of default fund pool

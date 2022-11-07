@@ -9,7 +9,7 @@ import "./Validator.sol";
 import "./interfaces/IValidator.sol";
 import "./library/SortedList.sol";
 
-contract SystemContract is Initializable, Params, SafeSend {
+contract SystemContract is Initializable, SafeSend {
     using SafeMath for uint256;
     using Address for address;
     using SortedLinkedList for SortedLinkedList.List;
