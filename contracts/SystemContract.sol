@@ -22,6 +22,7 @@ contract SystemContract is Initializable, Params, SafeSend {
     uint8 public gShareOutBonusPercent;              //
 
     uint256 public gTotalStake;                      // Total stake amount of the whole network
+    uint256 public gTotalStock;                      // Total stock amount of the whole network
     address[] public gActiveValidators;              // Validator address of the outgoing block in the current epoch
     mapping(address => IValidator) public gValidatorsMap;  // mapping from validator address to validator contract.
     SortedLinkedList.List topValidators;             // A sorted linked list of all valid validators
@@ -118,8 +119,9 @@ contract SystemContract is Initializable, Params, SafeSend {
         IValidator iVal = new Validator(signer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
-        iVal.BuyStocks{value : stake}(owner);
+        uint256 stocks = iVal.BuyStocks{value : stake}(owner);
         gTotalStake = gTotalStake.add(stake);
+        gTotalStock = gTotalStock.add(stocks);
     }
 
     function RegisterValidator(address signer, uint256 rate, bool acceptDelegation)
@@ -136,8 +138,9 @@ contract SystemContract is Initializable, Params, SafeSend {
         IValidator iVal = new Validator(signer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
-        iVal.BuyStocks{value : msg.value}(msg.sender);
+        uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         gTotalStake = gTotalStake.add(msg.value);
+        gTotalStock = gTotalStock.add(stocks);
     }
 
     function BuyStocks(address signer)
@@ -147,11 +150,12 @@ contract SystemContract is Initializable, Params, SafeSend {
         onlyExistValidator(signer)
         onlyNotContract(msg.sender) {
         IValidator iVal = gValidatorsMap[signer];
-        iVal.BuyStocks{value : msg.value}(msg.sender);
+        uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         if(iVal.SelfAssets(iVal.OwnerAddress()) >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
         }
         gTotalStake = gTotalStake.add(msg.value);
+        gTotalStock = gTotalStock.add(stocks);
     }
 
     function SellStocks(address signer, uint256 stocks)
@@ -167,6 +171,7 @@ contract SystemContract is Initializable, Params, SafeSend {
             topValidators.lowerRanking(iVal);
         }
         gTotalStake = gTotalStake.sub(stakes);
+        gTotalStock = gTotalStock.sub(stocks);
     }
 
     function Refund(address signer)
@@ -198,12 +203,14 @@ contract SystemContract is Initializable, Params, SafeSend {
                         iVal.AddBonus{value : bonusInvestor}();
                     }
                     if(bonusValidator > 0) {
-                        iVal.BuyStocks{value : bonusValidator}(iVal.OwnerAddress());
+                        uint256 stocks = iVal.BuyStocks{value : bonusValidator}(iVal.OwnerAddress());
+                        gTotalStock = gTotalStock.add(stocks);
                     }
                 }
                 if(cpFee > 0) {
                     sendValue(gCommunityAddress, cpFee);
                 }
+                gTotalStake = gTotalStake.add(bonusSingle);
             }
         }
     }
