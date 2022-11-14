@@ -48,7 +48,7 @@ contract Validator is SafeSend, IValidator, Ownable {
         gAcceptDelegation = acceptDelegation;
         gSignerState = state;
         uint256 stocks = stakeToStock(stake);
-        gStockMap[signer] = stocks;
+        gStockMap[owner] = stocks;
         gTotalStock = stocks;
         gTotalStake = stake;
         gBlockEpoch = epoch;
