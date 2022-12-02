@@ -133,9 +133,8 @@ contract SystemContract is Initializable, SafeSend {
         IValidator iVal = new Validator(signer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
-        uint256 stocks = iVal.BuyStocks{value : stake}(owner);
         gTotalStake = gTotalStake.add(stake);
-        gTotalStock = gTotalStock.add(stocks);
+        gTotalStock = gTotalStock.add(iVal.TotalStock());
         gAllValidatorAddresses.push(signer);
     }
 
