@@ -51,8 +51,10 @@ contract SystemContract is Initializable, SafeSend {
     event LogAddBonus(address indexed signer, uint256 amount);
     event LogUpdateActiveValidatorSet();
     event LogDecreaseMissedBlocksCounter();
-    event LogLazyPunishValidator(address indexed signer, uint256 time);
-    event LogDoubleSignPunishValidator(address indexed signer, uint256 time);
+    event LogDoLazyPunishLast(address indexed signer, uint256 amount, uint256 stocks);
+    event LogDoLazyPunishOnce(address indexed signer, uint256 amount, uint256 stocks);
+    event LogLazyPunishValidator(address indexed signer, uint256 indexed blockNumber);
+    event LogDoubleSignPunishValidator(address indexed signer, uint256 indexed blockNumber);
 
     modifier onlyLocal() {
         require(msg.sender == address(0x0000000000000000000000000000000000000000), "E00");
@@ -326,13 +328,15 @@ contract SystemContract is Initializable, SafeSend {
             iVal.SwitchState(StateLazyPunish);
             topValidators.removeRanking(iVal);
             gLazyPunishRecords[signer].missedBlocksCounter = 0;
+            emit LogDoLazyPunishLast(signer, finalValue, ownerDiffStock);
         } else if (gLazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
             (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(10));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
             topValidators.lowerRanking(iVal);
+            emit LogDoLazyPunishOnce(signer, finalValue, ownerDiffStock);
         }
-        emit LogLazyPunishValidator(signer, block.timestamp);
+        emit LogLazyPunishValidator(signer, block.number);
     }
 
     function decreaseMissedBlocksCounter()
@@ -380,7 +384,7 @@ contract SystemContract is Initializable, SafeSend {
         gTotalStock = gTotalStock.sub(ownerDiffStock);
         iVal.SwitchState(StateDoubleSignPunish);
         topValidators.removeRanking(iVal);
-        emit LogDoubleSignPunishValidator(signer, block.timestamp);
+        emit LogDoubleSignPunishValidator(signer, block.number);
     }
 
     function isDoubleSignPunished(bytes32 punishHash) public view returns (bool) {
