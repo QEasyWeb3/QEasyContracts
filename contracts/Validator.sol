@@ -78,13 +78,14 @@ contract Validator is SafeSend, IValidator, Ownable {
         return stakes;
     }
 
-    function Refund(address payable owner) external override onlyOwner {
+    function Refund(address payable owner) external override onlyOwner returns (uint256) {
         require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch.mul(SafetyZone), "E25");
         require(gRefundMap[owner].refundPendingWei > 0, "E26");
         uint256 amount = gRefundMap[owner].refundPendingWei;
         gRefundMap[owner].refundPendingWei = 0;
         gRefundMap[owner].lastRequestBlockNum = block.number;
         sendValue(owner, amount);
+        return amount;
     }
 
     function stakeToStock(uint256 stake) private view returns (uint256) {

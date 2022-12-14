@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 interface IValidator {
     function BuyStocks(address sender) external payable returns (uint256);
     function SellStocks(address sender, uint256 stocks) external returns (uint256);
-    function Refund(address payable sender) external;
+    function Refund(address payable sender) external returns (uint256);
     function AddBonus() external payable;
     function LazyPunish(uint256 amercement) external returns (uint256, uint256);
     function SwitchState(uint8 state) external;

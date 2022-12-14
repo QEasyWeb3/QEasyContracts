@@ -41,6 +41,15 @@ contract SystemContract is Initializable, SafeSend {
     address[] public gLazyPunishedSigners;
     mapping(bytes32 => bool) public doubleSignPunished;
 
+    event LogRegisterValidator(address indexed signer, uint256 rate, bool acceptDelegation);
+    event LogReactivateValidator(address indexed signer);
+    event LogBuyStocks(address indexed holder, address indexed signer, uint256 amount, uint256 stocks);
+    event LogSellStocks(address indexed holder, address indexed signer, uint256 stocks, uint256 amount);
+    event LogRefund(address indexed signer, uint256 amount);
+    event LogDistributeBlockTotalFee(uint256 indexed blockNumber, uint256 amount);
+    event LogCommunityAddressAddFee(uint256 indexed blockNumber, uint256 amount);
+    event LogAddBonus(address indexed signer, uint256 amount);
+    event LogUpdateActiveValidatorSet();
     event LogDecreaseMissedBlocksCounter();
     event LogLazyPunishValidator(address indexed signer, uint256 time);
     event LogDoubleSignPunishValidator(address indexed signer, uint256 time);
@@ -155,6 +164,7 @@ contract SystemContract is Initializable, SafeSend {
         gTotalStake = gTotalStake.add(msg.value);
         gTotalStock = gTotalStock.add(iVal.TotalStock());
         gAllValidatorAddresses.push(signer);
+        emit LogRegisterValidator(signer, rate, acceptDelegation);
     }
 
     function ReactivateValidator(address signer)
@@ -176,6 +186,7 @@ contract SystemContract is Initializable, SafeSend {
         }
         iVal.SwitchState(StateReady);
         topValidators.improveRanking(iVal);
+        emit LogReactivateValidator(signer);
     }
 
     function BuyStocks(address signer)
@@ -192,6 +203,7 @@ contract SystemContract is Initializable, SafeSend {
         }
         gTotalStake = gTotalStake.add(msg.value);
         gTotalStock = gTotalStock.add(stocks);
+        emit LogBuyStocks(msg.sender, signer, msg.value, stocks);
     }
 
     function SellStocks(address signer, uint256 stocks)
@@ -211,6 +223,7 @@ contract SystemContract is Initializable, SafeSend {
         }
         gTotalStake = gTotalStake.sub(stakes);
         gTotalStock = gTotalStock.sub(stocks);
+        emit LogSellStocks(msg.sender, signer, stocks, stakes);
     }
 
     function Refund(address signer)
@@ -218,7 +231,8 @@ contract SystemContract is Initializable, SafeSend {
         onlyExistValidator(signer) {
         address payable sender = payable(msg.sender);
         IValidator iVal = gValidatorsMap[signer];
-        iVal.Refund(sender);
+        uint256 amount = iVal.Refund(sender);
+        emit LogRefund(signer, amount);
     }
 
     function distributeBlockFee()
@@ -240,16 +254,20 @@ contract SystemContract is Initializable, SafeSend {
                     uint256 bonusValidator = bonusSingle - bonusInvestor;
                     if(bonusInvestor > 0) {
                         iVal.AddBonus{value : bonusInvestor}();
+                        emit LogAddBonus(val, bonusInvestor);
                     }
                     if(bonusValidator > 0) {
                         uint256 stocks = iVal.BuyStocks{value : bonusValidator}(iVal.OwnerAddress());
                         gTotalStock = gTotalStock.add(stocks);
+                        emit LogBuyStocks(iVal.OwnerAddress(), val, bonusValidator, stocks);
                     }
                 }
                 if(cpFee > 0) {
                     sendValue(gCommunityAddress, cpFee);
+                    emit LogCommunityAddressAddFee(block.number, cpFee);
                 }
                 gTotalStake = gTotalStake.add(bonusSingle);
+                emit LogDistributeBlockTotalFee(block.number, amount);
             }
         }
     }
@@ -275,6 +293,7 @@ contract SystemContract is Initializable, SafeSend {
         onlyBlockEpoch {
         require(newSet.length > 0, "E18");
         gActiveValidators = newSet;
+        emit LogUpdateActiveValidatorSet();
     }
 
     function getActiveValidators() external view returns (address[] memory){
