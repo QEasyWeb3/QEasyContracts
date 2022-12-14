@@ -110,7 +110,7 @@ contract Validator is SafeSend, IValidator, Ownable {
         gSignerState = state;
     }
 
-    function LazyPunish(uint256 amercement) external override onlyOwner returns (uint256, uint256) {
+    function DoPunish(uint256 amercement) external override onlyOwner returns (uint256, uint256) {
         uint256 finalValue = amercement;
         uint256 ownerStocks = gStockMap[gOwnerAddress];
         uint256 ownerStake = stockToStake(ownerStocks);

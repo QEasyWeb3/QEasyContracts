@@ -322,7 +322,7 @@ contract SystemContract is Initializable, SafeSend {
         uint256 finalValue = 0;
         uint256 ownerDiffStock = 0;
         if (gLazyPunishRecords[signer].missedBlocksCounter % removeThreshold == 0){
-            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(5));
+            (finalValue, ownerDiffStock) = iVal.DoPunish(gMinSelfStake.div(5));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
             iVal.SwitchState(StateLazyPunish);
@@ -330,7 +330,7 @@ contract SystemContract is Initializable, SafeSend {
             gLazyPunishRecords[signer].missedBlocksCounter = 0;
             emit LogDoLazyPunishLast(signer, finalValue, ownerDiffStock);
         } else if (gLazyPunishRecords[signer].missedBlocksCounter % lazyPunishThreshold == 0) {
-            (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake.div(10));
+            (finalValue, ownerDiffStock) = iVal.DoPunish(gMinSelfStake.div(10));
             gTotalStake = gTotalStake.sub(finalValue);
             gTotalStock = gTotalStock.sub(ownerDiffStock);
             topValidators.lowerRanking(iVal);
@@ -379,7 +379,7 @@ contract SystemContract is Initializable, SafeSend {
         IValidator iVal = gValidatorsMap[signer];
         uint256 finalValue = 0;
         uint256 ownerDiffStock = 0;
-        (finalValue, ownerDiffStock) = iVal.LazyPunish(gMinSelfStake);
+        (finalValue, ownerDiffStock) = iVal.DoPunish(gMinSelfStake);
         gTotalStake = gTotalStake.sub(finalValue);
         gTotalStock = gTotalStock.sub(ownerDiffStock);
         iVal.SwitchState(StateDoubleSignPunish);
