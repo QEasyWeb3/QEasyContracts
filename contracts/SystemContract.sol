@@ -457,4 +457,9 @@ contract SystemContract is Initializable, SafeSend {
     function LazyPunishMissedBlocksCounter(address signer) public view returns (uint256) {
         return gLazyPunishRecords[signer].missedBlocksCounter;
     }
+
+    function RefundPendingWei(address signer, address holder) public view returns (uint256) {
+        IValidator iVal = gValidatorsMap[signer];
+        return iVal.RefundPendingWei(holder);
+    }
 }

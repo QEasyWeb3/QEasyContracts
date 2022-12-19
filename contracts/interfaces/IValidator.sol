@@ -20,4 +20,5 @@ interface IValidator {
     function IsHolderExist(address holder) external view returns (bool);
     function HolderAddressesLength() external view returns (uint256);
     function HolderAddresses(uint256 startIndex, uint256 count) external view returns (address[] memory);
+    function RefundPendingWei(address sender) external view returns (uint256);
 }

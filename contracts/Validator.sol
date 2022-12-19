@@ -212,4 +212,8 @@ contract Validator is SafeSend, IValidator, Ownable {
         }
         return holderAddresses;
     }
+
+    function RefundPendingWei(address owner) external override view returns (uint256) {
+        return gRefundMap[owner].refundPendingWei;
+    }
 }
