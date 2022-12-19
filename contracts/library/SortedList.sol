@@ -33,7 +33,7 @@ library SortedLinkedList {
         if (_prev == IValidator(address(0))) {
             if (_list.length >= 100) {
                 if (_totalStake <= _list.tail.TotalStake()){
-                    return
+                    return;
                 }
                 _list.tail = _list.prev[_list.tail];
                 _list.next[_list.tail] = IValidator(address(0));
