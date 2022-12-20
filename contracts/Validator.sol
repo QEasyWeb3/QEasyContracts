@@ -41,16 +41,15 @@ contract Validator is SafeSend, IValidator, Ownable {
     }
     mapping(address => RefundPendingInfo) public gRefundMap;
 
-    constructor(address signer, address owner, uint256 rate, uint256 stake, bool acceptDelegation, uint8 state, uint256 epoch, address payable communityAddress) {
+    constructor(address signer, address owner, uint256 rate, bool acceptDelegation, uint8 state, uint256 epoch, address payable communityAddress) {
         gSignerAddress = signer;
         gOwnerAddress = owner;
         gSignerRate = rate;
         gAcceptDelegation = acceptDelegation;
         gSignerState = state;
-        uint256 stocks = stakeToStock(stake);
-        gStockMap[owner] = stocks;
-        gTotalStock = stocks;
-        gTotalStake = stake;
+        gStockMap[owner] = 0;
+        gTotalStock = 0;
+        gTotalStake = 0;
         gBlockEpoch = epoch;
         gCommunityAddress = communityAddress;
     }

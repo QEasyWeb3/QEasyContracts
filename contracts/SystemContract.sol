@@ -141,11 +141,12 @@ contract SystemContract is Initializable, SafeSend {
         onlyGreaterZero(stake)
         onlyGenesisBlock
         onlyInitialized {
-        IValidator iVal = new Validator(signer, owner, rate, stake, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
+        IValidator iVal = new Validator(signer, owner, rate, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
-        topValidators.improveRanking(iVal);
+        uint256 stocks = iVal.BuyStocks{value : stake}(owner);
         gTotalStake = gTotalStake.add(stake);
-        gTotalStock = gTotalStock.add(iVal.TotalStock());
+        gTotalStock = gTotalStock.add(stocks);
+        topValidators.improveRanking(iVal);
         gAllValidatorAddresses.push(signer);
     }
 
@@ -160,11 +161,12 @@ contract SystemContract is Initializable, SafeSend {
         onlyValid100(rate)
         onlyInitialized {
         require(msg.value >= gMinSelfStake, "E12");
-        IValidator iVal = new Validator(signer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
+        IValidator iVal = new Validator(signer, msg.sender, rate, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
-        topValidators.improveRanking(iVal);
+        uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         gTotalStake = gTotalStake.add(msg.value);
-        gTotalStock = gTotalStock.add(iVal.TotalStock());
+        gTotalStock = gTotalStock.add(stocks);
+        topValidators.improveRanking(iVal);
         gAllValidatorAddresses.push(signer);
         emit LogRegisterValidator(signer, rate, acceptDelegation);
     }
