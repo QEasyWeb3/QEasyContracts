@@ -77,43 +77,43 @@ contract SystemContract is Initializable, SafeSend {
     }
 
     modifier onlyNotContract(address val) {
-        require(!val.isContract(), "E02");
+        require(!val.isContract(), "E04");
         _;
     }
 
     modifier onlyMiner() {
-        require(msg.sender == block.coinbase, "E04");
+        require(msg.sender == block.coinbase, "E05");
         _;
     }
 
     modifier onlyValidAddress(address addr) {
-        require(addr != address(0), "E05");
+        require(addr != address(0), "E06");
         _;
     }
     
     modifier onlyValid100(uint256 rate) {
-        require(rate <= RateDenominator, "E06");
+        require(rate <= RateDenominator, "E07");
         _;
     }
 
     modifier onlyGreaterZero(uint256 amount) {
-        require(amount > 0, "E07");
+        require(amount > 0, "E08");
         _;
     }
 
     modifier onlyOperateOnce(Operation operation) {
-        require(!operationsDone[block.number][operation], "E06");
+        require(!operationsDone[block.number][operation], "E09");
         operationsDone[block.number][operation] = true;
         _;
     }
 
     modifier onlyBlockEpoch() {
-        require(block.number % gBlockEpoch == 0, "E17");
+        require(block.number % gBlockEpoch == 0, "E10");
         _;
     }
 
     modifier onlyNotDoubleSignPunished(bytes32 punishHash) {
-        require(!doubleSignPunished[punishHash], "E06");
+        require(!doubleSignPunished[punishHash], "E11");
         _;
     }
 
@@ -159,7 +159,7 @@ contract SystemContract is Initializable, SafeSend {
         onlyNotContract(msg.sender)
         onlyValid100(rate)
         onlyInitialized {
-        require(msg.value >= gMinSelfStake, "E20");
+        require(msg.value >= gMinSelfStake, "E12");
         IValidator iVal = new Validator(signer, msg.sender, rate, msg.value, acceptDelegation, StateReady, gBlockEpoch, gCommunityAddress);
         gValidatorsMap[signer] = iVal;
         topValidators.improveRanking(iVal);
@@ -176,10 +176,10 @@ contract SystemContract is Initializable, SafeSend {
     onlyNotContract(signer)
     onlyInitialized {
         IValidator iVal = gValidatorsMap[signer];
-        require(msg.sender == iVal.OwnerAddress(), "E22");
-        require(iVal.SignerState() == StateExit || iVal.SignerState() == StateLazyPunish, "E55");
+        require(msg.sender == iVal.OwnerAddress(), "E13");
+        require(iVal.SignerState() == StateExit || iVal.SignerState() == StateLazyPunish, "E14");
         if(iVal.SignerState() == StateLazyPunish) {
-            require(msg.value >= gMinSelfStake, "E20");
+            require(msg.value >= gMinSelfStake, "E15");
         }
         if (msg.value > 0) {
             uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
@@ -198,7 +198,7 @@ contract SystemContract is Initializable, SafeSend {
         onlyExistValidator(signer)
         onlyNotContract(msg.sender) {
         IValidator iVal = gValidatorsMap[signer];
-        require(iVal.SignerState() == StateReady, "E33");
+        require(iVal.SignerState() == StateReady, "E16");
         uint256 stocks = iVal.BuyStocks{value : msg.value}(msg.sender);
         if(iVal.SelfAssets(iVal.OwnerAddress()) >= gMinSelfStake) {
             topValidators.improveRanking(iVal);
@@ -215,7 +215,7 @@ contract SystemContract is Initializable, SafeSend {
         onlyNotContract(msg.sender) {
         IValidator iVal = gValidatorsMap[signer];
         if (msg.sender == iVal.OwnerAddress()) {
-            require(iVal.SignerState() != StateDoubleSignPunish, "E56");
+            require(iVal.SignerState() != StateDoubleSignPunish, "E17");
         }
         uint256 stakes = iVal.SellStocks(msg.sender, stocks);
         if(iVal.SelfAssets(iVal.OwnerAddress()) < gMinSelfStake) {

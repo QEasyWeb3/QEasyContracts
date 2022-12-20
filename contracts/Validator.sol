@@ -68,7 +68,7 @@ contract Validator is SafeSend, IValidator, Ownable {
     }
 
     function SellStocks(address owner, uint256 stocks) external override onlyOwner returns (uint256) {
-        require(gStockMap[owner] >= stocks, "E25");
+        require(gStockMap[owner] >= stocks, "E19");
         uint256 stakes = stockToStake(stocks);
         gStockMap[owner] -= stocks;
         gTotalStock -= stocks;
@@ -79,8 +79,8 @@ contract Validator is SafeSend, IValidator, Ownable {
     }
 
     function Refund(address payable owner) external override onlyOwner returns (uint256) {
-        require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch.mul(SafetyZone), "E25");
-        require(gRefundMap[owner].refundPendingWei > 0, "E26");
+        require(block.number >= gRefundMap[owner].lastRequestBlockNum + gBlockEpoch.mul(SafetyZone), "E20");
+        require(gRefundMap[owner].refundPendingWei > 0, "E21");
         uint256 amount = gRefundMap[owner].refundPendingWei;
         gRefundMap[owner].refundPendingWei = 0;
         gRefundMap[owner].lastRequestBlockNum = block.number;
