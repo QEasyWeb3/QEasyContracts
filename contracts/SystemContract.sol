@@ -4,7 +4,6 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./library/Initializable.sol";
-import "./Params.sol";
 import "./Validator.sol";
 import "./interfaces/IValidator.sol";
 import "./library/SortedList.sol";
