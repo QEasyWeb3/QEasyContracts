@@ -1,31 +1,54 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 import "./library/Initializable.sol";
+import "./SystemContract.sol";
 
 contract OnChainDao is Initializable {
-    struct Proposal {
-        uint id;
-        uint action;
+    address public constant SystemContractAddr = address(0x000000000000000000000000000000000000f000);
+    uint256 public proposalLastingPeriod = 7 days;
+    enum VoteState {
+        Unknown,
+        Agree,
+        Reject
+    }
+
+    uint8 ExecuteProposal = 0;
+    uint8 DeleteCode = 1;
+
+    struct ProposalInfo {
+        uint8 action;
         address from;
         address to;
-        uint value;
+        uint256 value;
         bytes data;
     }
 
+    struct Proposal {
+        uint256 id;
+        address proposer;
+        ProposalInfo info;
+        uint256 createTime;
+        uint16 agreeCount;
+        uint16 rejectCount;
+        VoteState state;
+    }
+
+    struct VoteInfo {
+        uint256 voteTime;
+        bool result;
+    }
 
     address public admin;
-    address public pendingAdmin;
+    SystemContract systemContract;
+    Proposal[] public proposals;
+    uint256[] public passedProposalIds;
+    mapping(uint256 => mapping(address => VoteInfo)) public votes;
 
-    Proposal[] proposals;
-
-    Proposal[] passedProposals;
-
-
-    event AdminChanging(address indexed newAdmin);
     event AdminChanged(address indexed newAdmin);
-
-    event ProposalCommitted(uint indexed id);
-    event ProposalFinished(uint indexed id);
+    event ProposalCommitted(uint256 indexed id);
+    event ProposalFinished(uint256 indexed id);
+    event LogVote(uint256 indexed id, address indexed voter, bool result, uint256 time);
+    event LogProposalResult(uint256 indexed id, bool result, uint256 time);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "E02");
@@ -37,33 +60,63 @@ contract OnChainDao is Initializable {
         _;
     }
 
+    modifier onlyActiveValidator() {
+        require(systemContract.isActiveValidator(msg.sender), "E22");
+        _;
+    }
+
+    modifier onlyAllowed() {
+        require(systemContract.isActiveValidator(msg.sender) || msg.sender == admin, "E27");
+        _;
+    }
+
     function initialize(address _admin) external initializer {
         admin = _admin;
+        systemContract = SystemContract(SystemContractAddr);
     }
 
-    function commitChangeAdmin(address newAdmin) external onlyAdmin {
-        pendingAdmin = newAdmin;
-
-        emit AdminChanging(newAdmin);
+    function transferAdmin(address newAdmin) external onlyAdmin {
+        admin = newAdmin;
+        emit AdminChanged(newAdmin);
     }
 
-    function confirmChangeAdmin() external {
-        require(msg.sender == pendingAdmin, "E03");
-
-        admin = pendingAdmin;
-        pendingAdmin = address(0);
-
-        emit AdminChanged(admin);
-    }
-
-    function commitProposal(uint action, address from, address to, uint value, bytes calldata input) external onlyAdmin {
+    function commitProposal(uint8 action, address from, address to, uint value, bytes calldata input) external onlyAllowed {
+        require(action >= ExecuteProposal && action <= DeleteCode, "E28");
         uint id = proposals.length;
-        Proposal memory p = Proposal(id, action, from, to, value, input);
-
+        ProposalInfo memory info = ProposalInfo(action, from, to, value, input);
+        VoteState state = VoteState.Unknown;
+        if (msg.sender == admin) {
+            passedProposalIds.push(id);
+            state = VoteState.Agree;
+            emit LogProposalResult(id, true, block.timestamp);
+        }
+        Proposal memory p = Proposal(id, msg.sender, info, block.timestamp, 0, 0, state);
         proposals.push(p);
-        passedProposals.push(p);
-
         emit ProposalCommitted(id);
+    }
+
+    function voteProposal(uint id, bool result) external onlyActiveValidator {
+        require(proposals[id].createTime != 0, "E23");
+        require(proposals[id].state == VoteState.Unknown, "E26");
+        require(votes[id][msg.sender].voteTime == 0, "E24");
+        require(block.timestamp < proposals[id].createTime + proposalLastingPeriod, "E25");
+
+        votes[id][msg.sender].voteTime = block.timestamp;
+        votes[id][msg.sender].result = result;
+        emit LogVote(id, msg.sender, result, block.timestamp);
+        if (result) {
+            proposals[id].agreeCount = proposals[id].agreeCount + 1;
+        } else {
+            proposals[id].rejectCount = proposals[id].rejectCount + 1;
+        }
+        if (proposals[id].agreeCount >= systemContract.getActiveValidators().length / 2 + 1) {
+            proposals[id].state = VoteState.Agree;
+            passedProposalIds.push(id);
+            emit LogProposalResult(id, true, block.timestamp);
+        } else if (proposals[id].rejectCount >= systemContract.getActiveValidators().length / 2 + 1) {
+            proposals[id].state = VoteState.Reject;
+            emit LogProposalResult(id, false, block.timestamp);
+        }
     }
 
     function getProposalsTotalCount() view external returns (uint) {
@@ -72,7 +125,7 @@ contract OnChainDao is Initializable {
 
     function getProposalById(uint id) view external returns (
         uint _id,
-        uint action,
+        uint8 action,
         address from,
         address to,
         uint value,
@@ -80,38 +133,39 @@ contract OnChainDao is Initializable {
         require(id < proposals.length, "Id does not exist");
 
         Proposal memory p = proposals[id];
-        return (p.id, p.action, p.from, p.to, p.value, p.data);
+        ProposalInfo memory info = p.info;
+        return (p.id, info.action, info.from, info.to, info.value, info.data);
     }
 
     function getPassedProposalCount() view external returns (uint32) {
-        return uint32(passedProposals.length);
+        return uint32(passedProposalIds.length);
     }
 
     function getPassedProposalByIndex(uint32 index) view external returns (
-        uint id,
-        uint action,
+        uint256 id,
+        uint8 action,
         address from,
         address to,
         uint value,
         bytes memory data) {
-        require(index < passedProposals.length, "Index out of range");
+        require(index < passedProposalIds.length, "Index out of range");
 
-        Proposal memory p = passedProposals[index];
-        return (p.id, p.action, p.from, p.to, p.value, p.data);
+        uint256 pId = passedProposalIds[index];
+        Proposal memory p = proposals[pId];
+        ProposalInfo memory info = p.info;
+        return (p.id, info.action, info.from, info.to, info.value, info.data);
     }
 
     function finishProposalById(uint id) external onlyLocal {
-        for (uint i = 0; i < passedProposals.length; i++) {
-            if (passedProposals[i].id == id) {
-                if (i != passedProposals.length - 1) {
-                    passedProposals[i] = passedProposals[passedProposals.length - 1];
+        for (uint i = 0; i < passedProposalIds.length; i++) {
+            if (passedProposalIds[i] == id) {
+                if (i != passedProposalIds.length - 1) {
+                    passedProposalIds[i] = passedProposalIds[passedProposalIds.length - 1];
                 }
-                passedProposals.pop();
-
+                passedProposalIds.pop();
                 emit ProposalFinished(id);
                 break;
             }
         }
     }
-
 }

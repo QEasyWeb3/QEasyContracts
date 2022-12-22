@@ -304,6 +304,15 @@ contract SystemContract is Initializable, SafeSend {
         return gActiveValidators;
     }
 
+    function isActiveValidator(address who) public view returns (bool) {
+        for (uint256 i = 0; i < gActiveValidators.length; i++) {
+            if (gActiveValidators[i] == who) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function lazyPunish(address signer)
         external
         onlyLocal
