@@ -5,7 +5,7 @@ import "./SystemContract.sol";
 
 contract OnChainDao is Initializable {
     address public constant SystemContractAddr = address(0x000000000000000000000000000000000000f000);
-    uint256 public proposalLastingPeriod = 7 days;
+    uint256 public constant ProposalLastingPeriod = 7 days;
     uint8 public constant ExecuteProposal = 0;
     uint8 public constant ExecuteDeleteCode = 1;
 
@@ -85,26 +85,31 @@ contract OnChainDao is Initializable {
         uint id = proposals.length;
         ProposalInfo memory info = ProposalInfo(action, from, to, value, input);
         VoteState state = VoteState.Unknown;
+        uint16 agreeCount = 0;
         if (msg.sender == admin) {
             passedProposalIds.push(id);
             state = VoteState.Agree;
             emit LogProposalResult(id, true, block.timestamp);
+        } else {
+            votes[id][msg.sender].voteTime = block.timestamp;
+            votes[id][msg.sender].result = true;
+            agreeCount = 1;
         }
-        Proposal memory p = Proposal(id, msg.sender, info, block.timestamp, 0, 0, state);
+        Proposal memory p = Proposal(id, msg.sender, info, block.timestamp, agreeCount, 0, state);
         proposals.push(p);
         emit ProposalCommitted(id);
     }
 
-    function voteProposal(uint id, bool result) external onlyActiveValidator {
+    function voteProposal(uint id, bool select) external onlyActiveValidator {
         require(proposals[id].createTime != 0, "E23");
         require(proposals[id].state == VoteState.Unknown, "E26");
         require(votes[id][msg.sender].voteTime == 0, "E24");
-        require(block.timestamp < proposals[id].createTime + proposalLastingPeriod, "E25");
+        require(block.timestamp < proposals[id].createTime + ProposalLastingPeriod, "E25");
 
         votes[id][msg.sender].voteTime = block.timestamp;
-        votes[id][msg.sender].result = result;
-        emit LogVote(id, msg.sender, result, block.timestamp);
-        if (result) {
+        votes[id][msg.sender].result = select;
+        emit LogVote(id, msg.sender, select, block.timestamp);
+        if (select) {
             proposals[id].agreeCount = proposals[id].agreeCount + 1;
         } else {
             proposals[id].rejectCount = proposals[id].rejectCount + 1;
