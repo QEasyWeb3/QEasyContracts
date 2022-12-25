@@ -6,12 +6,6 @@ import "./SystemContract.sol";
 contract OnChainDao is Initializable {
     address public constant SystemContractAddr = address(0x000000000000000000000000000000000000f000);
     uint256 public proposalLastingPeriod = 7 days;
-    enum VoteState {
-        Unknown,
-        Agree,
-        Reject
-    }
-
     uint8 ExecuteProposal = 0;
     uint8 DeleteCode = 1;
 
@@ -21,6 +15,12 @@ contract OnChainDao is Initializable {
         address to;
         uint256 value;
         bytes data;
+    }
+
+    enum VoteState {
+        Unknown,
+        Agree,
+        Reject
     }
 
     struct Proposal {
