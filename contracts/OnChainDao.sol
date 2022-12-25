@@ -6,8 +6,8 @@ import "./SystemContract.sol";
 contract OnChainDao is Initializable {
     address public constant SystemContractAddr = address(0x000000000000000000000000000000000000f000);
     uint256 public proposalLastingPeriod = 7 days;
-    uint8 ExecuteProposal = 0;
-    uint8 DeleteCode = 1;
+    uint8 public constant ExecuteProposal = 0;
+    uint8 public constant ExecuteDeleteCode = 1;
 
     struct ProposalInfo {
         uint8 action;
@@ -81,7 +81,7 @@ contract OnChainDao is Initializable {
     }
 
     function commitProposal(uint8 action, address from, address to, uint value, bytes calldata input) external onlyAllowed {
-        require(action >= ExecuteProposal && action <= DeleteCode, "E28");
+        require(action >= ExecuteProposal && action <= ExecuteDeleteCode, "E28");
         uint id = proposals.length;
         ProposalInfo memory info = ProposalInfo(action, from, to, value, input);
         VoteState state = VoteState.Unknown;
